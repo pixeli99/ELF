@@ -482,6 +482,16 @@ def run_training(config, *, force_cpu: bool = False):
             train_metrics.append(metrics)
             epoch_pbar.update(1)
 
+            if config.max_train_steps > 0 and global_step >= config.max_train_steps:
+                state.epoch = epoch + (step_in_epoch + 1) / max(steps_per_epoch, 1)
+                save_checkpoint(state, config.output_dir, global_step, hf_repo_id=config.hf_repo_id)
+                log_for_0(
+                    f"Reached max_train_steps={config.max_train_steps}; "
+                    f"saved checkpoint at step {global_step} and stopping."
+                )
+                epoch_pbar.close()
+                return
+
             if global_step % config.log_freq == 0:
                 stacked = torch.stack([
                     torch.stack([m["loss"] for m in train_metrics]).mean(),
