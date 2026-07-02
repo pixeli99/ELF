@@ -369,7 +369,7 @@ def run_training(config, *, force_cpu: bool = False):
 
     # torch.compile before DDP so only the inner module is compiled and
     # checkpoint I/O (which uses unwrap_model -> _orig_mod) still works.
-    if device.type == "cuda":
+    if device.type == "cuda" and bool(getattr(config, "use_compile", True)):
         log_for_0("Compiling ELF model with torch.compile (first step will be slower)...")
         state = state.replace(model=torch.compile(state.model))
 
