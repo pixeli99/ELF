@@ -1,0 +1,84 @@
+# Ordered ELF REGISTER CONTROL on OpenWebText, ELF-B — PyTorch. (baseline ladder rung 1)
+#
+# True register control: the K plan slots are structurally present (same architecture,
+# same extra sequence length / FLOPs as the science arm) but carry NO data-derived
+# information — the plan input is pure noise at t_plan = 0 on every row, and there is no
+# plan loss. Any gain of this rung over vanilla ELF is the ViT-"registers" effect (free
+# computation tokens), NOT planning. The science arm must beat this rung for the planning
+# claim to stand.
+#
+# NOTE: plan_loss_weight: 0.0 is NOT a register control — the noised pooled target would
+# still leak information through the input.
+
+# Dataset
+data_path: "embedded-language-flows/openwebtext-t5"
+max_length: 1024
+
+# Encoder
+encoder_model_name: t5-small
+latent_mean: 0.0
+latent_std: 0.2
+
+# Model architecture
+model: ELF-B
+bottleneck_dim: 128
+num_time_tokens: 4
+num_self_cond_cfg_tokens: 4
+num_model_mode_tokens: 4
+
+# Planning stream — register-only control arm
+num_plan_slots: 16
+num_plan_time_tokens: 4
+plan_register_only: true
+plan_whiten: none        # no target is built; whitening pass is skipped
+
+# Denoiser objective
+denoiser_p_mean: -1.5
+denoiser_p_std: 0.8
+denoiser_noise_scale: 2.0
+t_eps: 0.05
+time_schedule: "logit_normal"
+
+# Decoder objective
+decoder_prob: 0.2
+decoder_noise_scale: 5.0
+decoder_p_mean: 0.8
+decoder_p_std: 0.8
+
+# Conditioning / CFG
+self_cond_prob: 0.5
+
+# Training (optimizer + schedule)
+epochs: 5
+global_batch_size: 512
+blr: 0.001
+weight_decay: 0.0
+warmup_epochs: 0.5
+warmup_steps: -1
+optimizer: muon
+
+# EMA
+ema_decay1: 0.9999
+
+# Sampling — the "null" trajectory keeps the slots at pure noise (matching training)
+sampling_configs_path: "src/configs/sampling_configs/register_sampling_configs.yml"
+num_samples: 1000
+
+# Logging & Checkpointing
+log_freq: 100
+save_freq: 1
+eval_freq: 1
+
+# Output
+output_dir: "outputs/elf_b-owt-register"
+hf_repo_id: null
+resume: null
+
+# Wandb
+use_wandb: true
+wandb_project: elf
+wandb_entity: null
+wandb_run_name: elf_b-owt-register
+
+# Misc
+seed: 42
