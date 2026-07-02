@@ -17,7 +17,7 @@ from transformers import AutoTokenizer
 from modules.t5_encoder import get_encoder
 from modules.model import ELF_models
 from utils.logging_utils import log_for_0
-from utils.checkpoint_utils import load_checkpoint
+from utils.checkpoint_utils import load_checkpoint, load_model_params_from_checkpoint
 from utils.train_utils import TrainState, get_optimizer
 from utils.data_utils import load_jsonl_dataset, load_dataset_split, get_pad_token_id
 from generation import test_generation_uncond, test_generation_cond
@@ -158,7 +158,13 @@ def main():
         config.sampling_configs = load_sampling_configs(config.sampling_configs_path)
 
     log_for_0(f"Loading checkpoint from: {args.checkpoint_path}")
-    state, _ = load_checkpoint(args.checkpoint_path, state)
+    try:
+        state, _ = load_checkpoint(args.checkpoint_path, state)
+    except Exception as e:
+        log_for_0(f"Full checkpoint load failed ({e}); trying model-only strict=False load.")
+        load_model_params_from_checkpoint(
+            state.model, args.checkpoint_path, strict=False, prefer_ema=True,
+        )
     state.model = state.model.to(device).eval()
 
     rank = dist.get_rank() if dist.is_initialized() else 0

@@ -24,6 +24,7 @@ from modules.t5_encoder import get_encoder
 from utils.logging_utils import log_for_0
 from utils.checkpoint_utils import (
     save_checkpoint, load_checkpoint, find_latest_checkpoint,
+    load_model_params_from_checkpoint,
 )
 from utils.train_utils import (
     TrainState, prefetch_to_device, get_optimizer, create_learning_rate_fn,
@@ -196,6 +197,10 @@ def run_training(config, *, force_cpu: bool = False):
     log_for_0(f"Gradient checkpointing: {bool(getattr(config, 'gradient_checkpointing', True))}")
     log_for_0("=" * 60)
 
+    if config.resume and config.init_from:
+        raise ValueError("Config cannot set both resume and init_from: resume restores training state; "
+                         "init_from only warm-starts model weights.")
+
     if config.use_wandb and rank == 0 and wandb is not None:
         wandb_config = {k: getattr(config, k) for k in dir(config) if not k.startswith("_")}
         wandb_tags = config.wandb_tag.split(",") if config.wandb_tag else None
@@ -263,6 +268,11 @@ def run_training(config, *, force_cpu: bool = False):
     total_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     log_for_0(f"Total trainable parameters: {total_trainable:,}")
 
+    if config.init_from:
+        load_model_params_from_checkpoint(
+            model, config.init_from, strict=False, prefer_ema=True,
+        )
+
     # Keep initialization identical across ranks, then make runtime stochastic
     # ops (e.g. dropout) rank-specific.
     torch.manual_seed(config.seed + rank)
@@ -326,8 +336,8 @@ def run_training(config, *, force_cpu: bool = False):
         step=0, epoch=0, dropout_generator=g,
     )
 
-    # Auto-resume: if no explicit resume path, check output_dir for existing checkpoints
-    if not config.resume:
+    # Auto-resume: if no explicit resume/init_from path, check output_dir for existing checkpoints.
+    if not config.resume and not config.init_from:
         auto_ckpt = find_latest_checkpoint(config.output_dir)
         if auto_ckpt:
             config.resume = config.output_dir

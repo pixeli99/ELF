@@ -159,6 +159,7 @@ class Config:
     output_dir: str = "./output_dir"
     hf_repo_id: str = None  # Optional HF repo id to mirror local outputs/checkpoints.
     resume: str = None
+    init_from: str = None  # Optional model-only warm-start checkpoint/HF id; does not restore optimizer/step.
 
     # Wandb
     use_wandb: bool = False
