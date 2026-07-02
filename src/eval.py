@@ -124,7 +124,12 @@ def main():
 
     # ELF model
     log_for_0(f"Creating {config.model} model...")
-    vocab_size = tokenizer.vocab_size
+    # Match train.py: tokenizer.vocab_size can exclude added special tokens that
+    # still appear in tokenized targets.
+    try:
+        vocab_size = len(tokenizer)
+    except TypeError:
+        vocab_size = tokenizer.vocab_size
     model = ELF_models[config.model](
         text_encoder_dim=encoder_config.d_model, max_length=config.max_length,
         attn_drop=config.attn_dropout, proj_drop=config.proj_dropout,
@@ -133,6 +138,11 @@ def main():
         vocab_size=vocab_size,
         num_model_mode_tokens=config.num_model_mode_tokens,
         bottleneck_dim=config.bottleneck_dim,
+        gradient_checkpointing=bool(getattr(config, "gradient_checkpointing", True)),
+        num_plan_slots=config.num_plan_slots,
+        num_plan_time_tokens=config.num_plan_time_tokens,
+        plan_whiten=config.plan_whiten,
+        plan_target_dim=config.plan_target_dim,
     ).to(device)
 
     # Train state template (only used to plumb EMA params + step/epoch).
