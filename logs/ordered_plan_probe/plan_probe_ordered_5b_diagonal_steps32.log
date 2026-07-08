@@ -1,0 +1,30 @@
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+Loading checkpoint: outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592
+Loaded EMA parameters.
+
+=== plan probe report ===
+{
+  "trajectory": "diagonal",
+  "alpha": 1.0,
+  "steps": 32,
+  "plan_cfg": 1.0,
+  "num_samples": 8,
+  "graft_token_change_frac": 0.427978515625,
+  "decode_shuffle_token_change_frac": 0.0008544921875,
+  "graft_latent_rel_change": 0.6839303970336914,
+  "consistency_matched": 2.368812322616577,
+  "consistency_mismatched": 2.4175119400024414,
+  "consistency_graft_followed": 2.454252243041992
+}
+
+--- A/normal sample 0 ---
+Anyways is one of the statistics key points: architects who design spend then generally have less projects they are at deadline and thus lose about 6% of all their work fees going through. The figures suggest these things are slow, over expensive, wasteeous, and the decline of most work environment likely can’t rest with marketing neither training nor staff update capacity. Task management are the
+
+--- B/graft sample 0 ---
+Hells is one of the statistics key points: Buyers who file Ana alternative generally have less jobs than are at deadline and now lose about 6% of all their provided wages going through. The figures indicate that it is thick, unsustainable, wasteeous, and the decline of most work market likely can’t rest around recruiting or improving toward staff recruiting base. Mission work is the builders’s ski
+
+--- C/decode-shuffle sample 0 ---
+Anyways is one of the statistics key points: architects who design spend then generally have less projects they are at deadline and thus lose about 6% of all their work fees going through. The figures suggest these things are slow, over expensive, wasteeous, and the decline of most work environment likely can’t rest with marketing neither training nor staff update capacity. Task management are the
+
+Report written to outputs/elf_b-owt-ordered/plan_probe_report.json

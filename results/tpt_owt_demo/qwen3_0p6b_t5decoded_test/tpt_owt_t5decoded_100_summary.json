@@ -1,0 +1,16 @@
+{
+  "num_samples": 3,
+  "dataset": "embedded-language-flows/openwebtext-t5",
+  "generator_model": "Qwen/Qwen3-0.6B",
+  "decode_tokenizer": "t5-small",
+  "context_max_tokens": 2048,
+  "max_new_tokens": 8192,
+  "temperature": 0.6,
+  "top_p": 0.9,
+  "context_tokens_mean": 892.3333333333334,
+  "context_tokens_median": 896.0,
+  "thinking_tokens_mean": 470.0,
+  "thinking_tokens_median": 481.0,
+  "thinking_tokens_min": 430,
+  "thinking_tokens_max": 499
+}

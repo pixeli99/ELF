@@ -1,0 +1,80 @@
+[launch] torchrun nproc_per_node=8 nnodes=1 node_rank=0 src/train.py
+W0703 15:45:27.659000 85761 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] 
+W0703 15:45:27.659000 85761 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] *****************************************
+W0703 15:45:27.659000 85761 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0703 15:45:27.659000 85761 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] *****************************************
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+INFO - __main__ - Applied 6 config override(s)
+INFO - __main__ - ============================================================
+INFO - __main__ - ELF Diffusion Model Training (PyTorch)
+INFO - __main__ - ============================================================
+INFO - __main__ - Model: ELF-B
+INFO - __main__ - Encoder Model: t5-small
+INFO - __main__ - Encoder Checkpoint: None
+INFO - __main__ - Data: embedded-language-flows/openwebtext-t5
+INFO - __main__ - Max sequence length: 1024
+INFO - __main__ - Output dir: outputs/elf_b-owt-ordered
+INFO - __main__ - HF Repo ID: None
+INFO - __main__ - Batch size per device: None
+INFO - __main__ - Number of epochs: 5
+INFO - __main__ - PyTorch device: cuda:0, world_size=8
+INFO - __main__ - BF16 autocast: True
+INFO - __main__ - Gradient checkpointing: True
+INFO - __main__ - ============================================================
+INFO - __main__ - Loading tokenizer...
+INFO - __main__ - Using PAD token for padding: 0
+INFO - utils.data_utils - Loading dataset from embedded-language-flows/openwebtext-t5...
+INFO - utils.data_utils - Train size: 9737184
+INFO - utils.data_utils - No eval dataset
+INFO - __main__ - Loading Encoder config: t5-small...
+INFO - modules.t5_encoder - Loading T5 Encoder: t5-small...
+INFO - __main__ - Encoder d_model: 512
+INFO - __main__ - Creating ELF-B model...
+INFO - __main__ - Tokenizer vocab: CE head=32100
+INFO - __main__ - ELF parameters: 106,171,748
+INFO - __main__ - Total trainable parameters: 106,171,748
+INFO - utils.checkpoint_utils - Warm-starting model from /workspace/greatwall/ELF_repro/hf_cache/hub/models--embedded-language-flows--ELF-B-owt-torch/snapshots/146f84133c1389bfd4ef47f14ec7a955da22faa7/checkpoint_95085 (strict=False, prefer_ema=True)...
+INFO - utils.checkpoint_utils - Loaded model params from local:ema_params1: 167 tensors
+INFO - utils.checkpoint_utils - Warm-start missing keys: 14 [plan_slot_embed, plan_t_emb_tokens, plan_target_mean, plan_target_std, plan_whiten_ready, plan_in_proj.weight, plan_in_proj.bias, plan_t_embedder.mlp_0.weight, plan_t_embedder.mlp_0.bias, plan_t_embedder.mlp_2.weight, plan_t_embedder.mlp_2.bias, plan_norm.weight, plan_head.weight, plan_head.bias]
+INFO - utils.checkpoint_utils - Warm-start unexpected keys: 0
+INFO - utils.checkpoint_utils - Warm-start shape-skipped keys: 0
+INFO - __main__ - Using global batch size: 64
+INFO - __main__ - World=8 | batch local=8, total=64 | steps/epoch=152143, total_train=760715, warmup=76071, lr=2.00e-03
+INFO - __main__ - Grad accum=8, effective batch=512, optimizer steps=95089
+INFO - utils.muon_utils - Muon: 62 2D params; Nesterov-AdamW: 116 other params
+INFO - utils.train_utils - Using Muon optimizer
+INFO - __main__ - Fitting plan-target whitener (zscore) on up to 64 batches...
+INFO - __main__ - Plan whitener (zscore): 62787 slots, raw pooled std ~ 0.255
+INFO - __main__ - Config saved to outputs/elf_b-owt-ordered/config.yml
+INFO - __main__ - 
+============================================================
+INFO - __main__ - Checkpoint and Evaluation Schedule
+INFO - __main__ - ============================================================
+INFO - __main__ - Steps/epoch=152143, epochs=5, total=760715 | save every 1 epoch(s), eval every 1 epoch(s)
+INFO - __main__ - Sampling configs: 4 config(s)
+INFO - __main__ - 
+============================================================
+INFO - __main__ - Starting Training
+INFO - __main__ - ============================================================
+INFO - __main__ - 
+Epoch 1/5
+Epoch 1:   0%|          | 0/152143 [00:00<?, ?it/s]INFO - __main__ - Performing initial training step, this may take longer...
+INFO - __main__ - First training step (torch.compile + execution) completed...
+Epoch 1:   0%|          | 1/152143 [00:01<57:45:54,  1.37s/it]Epoch 1:   0%|          | 4/152143 [00:02<26:46:05,  1.58it/s]Epoch 1:   0%|          | 7/152143 [00:04<22:35:25,  1.87it/s]Epoch 1:   0%|          | 9/152143 [00:05<22:46:49,  1.86it/s]Epoch 1:   0%|          | 12/152143 [00:06<21:08:18,  2.00it/s]Epoch 1:   0%|          | 14/152143 [00:07<23:05:14,  1.83it/s]Epoch 1:   0%|          | 16/152143 [00:10<32:24:22,  1.30it/s]Epoch 1:   0%|          | 18/152143 [00:11<29:34:10,  1.43it/s]Epoch 1:   0%|          | 20/152143 [00:12<29:05:42,  1.45it/s]Epoch 1:   0%|          | 22/152143 [00:14<31:26:07,  1.34it/s]Epoch 1:   0%|          | 24/152143 [00:17<40:20:35,  1.05it/s]Epoch 1:   0%|          | 27/152143 [00:19<33:55:54,  1.25it/s]Epoch 1:   0%|          | 29/152143 [00:20<34:46:23,  1.22it/s]Epoch 1:   0%|          | 31/152143 [00:22<35:27:10,  1.19it/s]Epoch 1:   0%|          | 33/152143 [00:24<37:53:54,  1.11it/s]Epoch 1:   0%|          | 35/152143 [00:26<39:32:05,  1.07it/s]Epoch 1:   0%|          | 37/152143 [00:28<38:48:57,  1.09it/s]Epoch 1:   0%|          | 39/152143 [00:30<38:18:40,  1.10it/s]Epoch 1:   0%|          | 41/152143 [00:31<36:26:50,  1.16it/s]Epoch 1:   0%|          | 43/152143 [00:33<37:36:08,  1.12it/s]Epoch 1:   0%|          | 45/152143 [00:35<37:40:35,  1.12it/s]Epoch 1:   0%|          | 47/152143 [00:37<37:42:57,  1.12it/s]Epoch 1:   0%|          | 49/152143 [00:39<38:59:54,  1.08it/s]Epoch 1:   0%|          | 51/152143 [00:40<36:07:22,  1.17it/s]Epoch 1:   0%|          | 53/152143 [00:42<36:37:18,  1.15it/s]Epoch 1:   0%|          | 55/152143 [00:44<38:42:52,  1.09it/s]Epoch 1:   0%|          | 57/152143 [00:46<36:33:51,  1.16it/s]Epoch 1:   0%|          | 59/152143 [00:47<34:52:11,  1.21it/s]Epoch 1:   0%|          | 61/152143 [00:49<35:49:10,  1.18it/s]Epoch 1:   0%|          | 63/152143 [00:50<33:17:39,  1.27it/s]Epoch 1:   0%|          | 65/152143 [00:52<32:54:57,  1.28it/s]Epoch 1:   0%|          | 67/152143 [00:53<34:04:30,  1.24it/s]Epoch 1:   0%|          | 69/152143 [00:55<35:19:50,  1.20it/s]Epoch 1:   0%|          | 71/152143 [00:57<33:50:53,  1.25it/s]Epoch 1:   0%|          | 73/152143 [00:58<33:09:30,  1.27it/s]Epoch 1:   0%|          | 75/152143 [01:00<33:48:33,  1.25it/s]Epoch 1:   0%|          | 77/152143 [01:02<34:31:28,  1.22it/s]Epoch 1:   0%|          | 79/152143 [01:03<34:32:08,  1.22it/s]Epoch 1:   0%|          | 81/152143 [01:05<36:32:33,  1.16it/s]Epoch 1:   0%|          | 83/152143 [01:07<34:04:11,  1.24it/s]Epoch 1:   0%|          | 85/152143 [01:08<35:09:43,  1.20it/s]Epoch 1:   0%|          | 87/152143 [01:10<35:37:55,  1.19it/s]Epoch 1:   0%|          | 89/152143 [01:12<34:32:54,  1.22it/s]Epoch 1:   0%|          | 91/152143 [01:13<35:25:55,  1.19it/s]Epoch 1:   0%|          | 93/152143 [01:15<36:05:34,  1.17it/s]Epoch 1:   0%|          | 95/152143 [01:17<36:22:05,  1.16it/s]Epoch 1:   0%|          | 97/152143 [01:19<38:05:56,  1.11it/s]Epoch 1:   0%|          | 99/152143 [01:20<35:06:54,  1.20it/s]INFO - __main__ - {'step': '100', 'loss': '1.8070', 'l2': '0.7055', 'ce': '1.0278', 'plan': '1.0020', 'sps': '1.2', 'lr': '2.52e-06'}
+Epoch 1:   0%|          | 100/152143 [01:22<35:06:53,  1.20it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]                                                                                                                                                INFO - engine - Step 100: loss=1.8070, l2=0.7055, ce=1.0278, plan=1.0020, lr=2.52e-06, steps/sec=1.20
+Epoch 1:   0%|          | 100/152143 [01:22<35:06:53,  1.20it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 101/152143 [01:22<36:58:53,  1.14it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 104/152143 [01:24<34:29:13,  1.22it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 107/152143 [01:26<30:10:08,  1.40it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 109/152143 [01:28<32:39:59,  1.29it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 111/152143 [01:30<33:49:03,  1.25it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 113/152143 [01:32<35:55:40,  1.18it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 115/152143 [01:33<33:30:23,  1.26it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 117/152143 [01:34<31:52:18,  1.32it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 119/152143 [01:35<30:43:50,  1.37it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 121/152143 [01:37<31:09:22,  1.36it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 123/152143 [01:39<32:52:11,  1.28it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 125/152143 [01:41<34:15:12,  1.23it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 127/152143 [01:42<35:02:07,  1.21it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]Epoch 1:   0%|          | 129/152143 [01:44<37:02:41,  1.14it/s, ce=1.0278, l2=0.7055, loss=1.8070, lr=2.52e-06, plan=1.0020, sps=1.2, step=100]                                                        

@@ -2,3 +2,34 @@ __pycache__/
 *.pyc
 outputs/
 wandb/
+
+# heavy checkpoints / model weights
+outputs/**/checkpoint_*
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+
+# caches
+hf_cache/
+.cache/
+__pycache__/
+*.pyc
+
+# local env
+.env
+.venv/
+
+# large local checkpoints
+outputs/**/checkpoint_*
+checkpoint_*
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.bin
+
+# backup files
+*.bak_*
+*.bak*

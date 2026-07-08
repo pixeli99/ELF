@@ -1,0 +1,15 @@
+{
+  "num_samples": 3,
+  "dataset": "Skylion007/openwebtext",
+  "generator_model": "Qwen/Qwen3-0.6B",
+  "context_max_tokens": 2048,
+  "max_new_tokens": 8192,
+  "temperature": 0.6,
+  "top_p": 0.9,
+  "context_tokens_mean": 1496.6666666666667,
+  "context_tokens_median": 1290.0,
+  "thinking_tokens_mean": 381.6666666666667,
+  "thinking_tokens_median": 355.0,
+  "thinking_tokens_min": 255,
+  "thinking_tokens_max": 535
+}

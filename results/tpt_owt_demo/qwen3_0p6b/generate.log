@@ -1,0 +1,4 @@
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading model: Qwen/Qwen3-0.6B
+Loading weights:   0%|          | 0/311 [00:00<?, ?it/s]Loading weights:  41%|████      | 127/311 [00:00<00:00, 1259.47it/s]Loading weights: 100%|██████████| 311/311 [00:00<00:00, 1605.69it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.

@@ -1,0 +1,60 @@
+[launch] single-process: python src/train.py --config src/configs/training_configs/train_owt_ELF-B_register.yml --config_override init_from=/workspace/greatwall/ELF_repro/hf_cache/hub/models--embedded-language-flows--ELF-B-owt-torch/snapshots/146f84133c1389bfd4ef47f14ec7a955da22faa7/checkpoint_95085 --config_override data_path=/workspace/greatwall/ELF_repro/local_datasets/openwebtext-t5-smoke-128 --config_override output_dir=outputs/smoke_register_initfrom_1step --config_override max_train_steps=1 --config_override global_batch_size=1 --config_override batch_size=1 --config_override grad_accum_steps=1 --config_override num_workers=0 --config_override log_freq=1 --config_override save_freq=1 --config_override eval_freq=999999 --config_override use_wandb=false --config_override use_compile=false
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+INFO - __main__ - Applied 13 config override(s)
+INFO - __main__ - ============================================================
+INFO - __main__ - ELF Diffusion Model Training (PyTorch)
+INFO - __main__ - ============================================================
+INFO - __main__ - Model: ELF-B
+INFO - __main__ - Encoder Model: t5-small
+INFO - __main__ - Encoder Checkpoint: None
+INFO - __main__ - Data: /workspace/greatwall/ELF_repro/local_datasets/openwebtext-t5-smoke-128
+INFO - __main__ - Max sequence length: 1024
+INFO - __main__ - Output dir: outputs/smoke_register_initfrom_1step
+INFO - __main__ - HF Repo ID: None
+INFO - __main__ - Batch size per device: 1
+INFO - __main__ - Number of epochs: 5
+INFO - __main__ - PyTorch device: cuda:0, world_size=1
+INFO - __main__ - BF16 autocast: True
+INFO - __main__ - Gradient checkpointing: False
+INFO - __main__ - ============================================================
+INFO - __main__ - Loading tokenizer...
+INFO - __main__ - Using PAD token for padding: 0
+INFO - utils.data_utils - Loading dataset from /workspace/greatwall/ELF_repro/local_datasets/openwebtext-t5-smoke-128...
+INFO - utils.data_utils - Train size: 128
+INFO - utils.data_utils - No eval dataset
+INFO - __main__ - Loading Encoder config: t5-small...
+INFO - modules.t5_encoder - Loading T5 Encoder: t5-small...
+INFO - __main__ - Encoder d_model: 512
+INFO - __main__ - Creating ELF-B model...
+INFO - __main__ - Tokenizer vocab: CE head=32100
+INFO - __main__ - ELF parameters: 106,171,748
+INFO - __main__ - Total trainable parameters: 106,171,748
+INFO - utils.checkpoint_utils - Warm-starting model from /workspace/greatwall/ELF_repro/hf_cache/hub/models--embedded-language-flows--ELF-B-owt-torch/snapshots/146f84133c1389bfd4ef47f14ec7a955da22faa7/checkpoint_95085 (strict=False, prefer_ema=True)...
+INFO - utils.checkpoint_utils - Loaded model params from local:ema_params1: 167 tensors
+INFO - utils.checkpoint_utils - Warm-start missing keys: 14 [plan_slot_embed, plan_t_emb_tokens, plan_target_mean, plan_target_std, plan_whiten_ready, plan_in_proj.weight, plan_in_proj.bias, plan_t_embedder.mlp_0.weight, plan_t_embedder.mlp_0.bias, plan_t_embedder.mlp_2.weight, plan_t_embedder.mlp_2.bias, plan_norm.weight, plan_head.weight, plan_head.bias]
+INFO - utils.checkpoint_utils - Warm-start unexpected keys: 0
+INFO - utils.checkpoint_utils - Warm-start shape-skipped keys: 0
+INFO - __main__ - Using global batch size: 1
+INFO - __main__ - World=1 | batch local=1, total=1 | steps/epoch=128, total_train=640, warmup=64, lr=3.91e-06
+INFO - utils.muon_utils - Muon: 62 2D params; Nesterov-AdamW: 116 other params
+INFO - utils.train_utils - Using Muon optimizer
+INFO - __main__ - Config saved to outputs/smoke_register_initfrom_1step/config.yml
+INFO - __main__ - 
+============================================================
+INFO - __main__ - Checkpoint and Evaluation Schedule
+INFO - __main__ - ============================================================
+INFO - __main__ - Steps/epoch=128, epochs=5, total=640 | save every 1 epoch(s), eval every 999999 epoch(s)
+INFO - __main__ - Sampling configs: 1 config(s)
+INFO - __main__ - 
+============================================================
+INFO - __main__ - Starting Training
+INFO - __main__ - ============================================================
+INFO - __main__ - 
+Epoch 1/5
+Epoch 1:   0%|          | 0/128 [00:00<?, ?it/s]INFO - __main__ - Performing initial training step, this may take longer...
+INFO - __main__ - First training step (torch.compile + execution) completed...
+INFO - utils.checkpoint_utils - Saving checkpoint to /home/greatwall/ELF_ordered/ELF/outputs/smoke_register_initfrom_1step/checkpoint_1
+INFO - utils.checkpoint_utils - Checkpoint written to /home/greatwall/ELF_ordered/ELF/outputs/smoke_register_initfrom_1step/checkpoint_1
+INFO - __main__ - Reached max_train_steps=1; saved checkpoint at step 1 and stopping.
+Epoch 1:   1%|          | 1/128 [00:01<03:45,  1.77s/it]

@@ -1,0 +1,163 @@
+[launch] torchrun nproc_per_node=4 nnodes=1 node_rank=0 src/eval.py
+W0705 23:48:54.567000 1913785 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] 
+W0705 23:48:54.567000 1913785 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] *****************************************
+W0705 23:48:54.567000 1913785 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0705 23:48:54.567000 1913785 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] *****************************************
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+INFO - __main__ - Loading configuration...
+INFO - __main__ - Applied 5 config override(s)
+INFO - __main__ - Using global batch size for evaluation: 512
+INFO - __main__ - Config loaded from src/configs/training_configs/train_owt_ELF-B_ordered.yml
+INFO - __main__ - Model: ELF-B
+INFO - __main__ - Encoder Model: t5-small
+INFO - __main__ - Encoder Checkpoint: None
+INFO - __main__ - Max length: 1024
+INFO - __main__ - Max input length: None
+INFO - __main__ - Num samples: 1000
+INFO - __main__ - Sampling configs: 4 config(s)
+INFO - __main__ - BF16 autocast (sampling): True
+INFO - __main__ - torch.compile (eval model): False
+INFO - __main__ - Seeds to evaluate: [42]
+INFO - __main__ - Loading tokenizer...
+INFO - __main__ - Using PAD token for padding: 0
+INFO - __main__ - Loading Encoder: t5-small...
+INFO - modules.t5_encoder - Loading T5 Encoder: t5-small...
+INFO - __main__ - Creating ELF-B model...
+INFO - utils.muon_utils - Muon: 62 2D params; Nesterov-AdamW: 116 other params
+INFO - utils.train_utils - Using Muon optimizer
+INFO - __main__ - Loading checkpoint from: outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592
+INFO - utils.checkpoint_utils - Loading ELF checkpoint from outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592...
+INFO - utils.checkpoint_utils - Loading local checkpoint from /home/greatwall/ELF_ordered/ELF/outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592...
+INFO - utils.checkpoint_utils - Loaded checkpoint keys: ['params', 'ema_params1', 'opt_state', 'lr_scheduler', 'step', 'epoch', 'dropout_rng', 'grad_accum_buffers']
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1601: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be depracted in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
+  warnings.warn(
+INFO - utils.checkpoint_utils - Loaded local checkpoint from step 152592 (epoch 0)
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1601: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be depracted in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1601: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be depracted in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
+  warnings.warn(
+INFO - __main__ - 
+--- Sampling config 1/4 ---
+INFO - generation - Config: SamplingConfig(sampling_method='sde', num_sampling_steps=[32, 8], cfgs=[1], sde_gamma=1.5, self_cond_cfg_scales=[3], time_schedule='logit_normal', plan_trajectory='diagonal', plan_lead_alpha=2.0, plan_cfg_scale=1.0)
+INFO - generation - 
+======================================================================
+INFO - generation -               UNCONDITIONAL GENERATION EXAMPLES
+INFO - generation - ======================================================================
+INFO - generation - Per-device batch size: 128
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1601: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be depracted in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
+  warnings.warn(
+INFO - generation - 
+--- Method: sde, Steps: 32, CFG Scale: 1, SC-CFG: 3 ---
+Generating samples:   0%|          | 0/2 [00:00<?, ?it/s][rank2]: Traceback (most recent call last):
+[rank2]:   File "/home/greatwall/ELF_ordered/ELF/src/eval.py", line 210, in <module>
+[rank2]:     main()
+[rank2]:   File "/home/greatwall/ELF_ordered/ELF/src/eval.py", line 198, in main
+[rank2]:     test_generation_uncond(**common_kwargs)
+[rank2]:   File "/home/greatwall/ELF_ordered/ELF/src/generation.py", line 180, in test_generation_uncond
+[rank2]:     predicted_ids = _dlm_decode_batch(
+[rank2]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+[rank2]:     return func(*args, **kwargs)
+[rank2]:   File "/home/greatwall/ELF_ordered/ELF/src/utils/generation_utils.py", line 201, in _dlm_decode_batch
+[rank2]:     _, decoder_logits, _ = model(
+[rank2]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+[rank2]:     return forward_call(*args, **kwargs)
+[rank2]:   File "/home/greatwall/ELF_ordered/ELF/src/modules/model.py", line 352, in forward
+[rank2]:     decoder_logits = hidden @ self.unembed_kernel + self.unembed_bias
+[rank2]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 15.67 GiB. GPU 2 has a total capacity of 23.64 GiB of which 4.18 GiB is free. Including non-PyTorch memory, this process has 19.45 GiB memory in use. Of the allocated memory 18.90 GiB is allocated by PyTorch, and 102.30 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[rank3]: Traceback (most recent call last):
+[rank3]:   File "/home/greatwall/ELF_ordered/ELF/src/eval.py", line 210, in <module>
+[rank3]:     main()
+[rank3]:   File "/home/greatwall/ELF_ordered/ELF/src/eval.py", line 198, in main
+[rank3]:     test_generation_uncond(**common_kwargs)
+[rank3]:   File "/home/greatwall/ELF_ordered/ELF/src/generation.py", line 180, in test_generation_uncond
+[rank3]:     predicted_ids = _dlm_decode_batch(
+[rank3]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+[rank3]:     return func(*args, **kwargs)
+[rank3]:   File "/home/greatwall/ELF_ordered/ELF/src/utils/generation_utils.py", line 201, in _dlm_decode_batch
+[rank3]:     _, decoder_logits, _ = model(
+[rank3]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+[rank3]:     return self._call_impl(*args, **kwargs)
+[rank3]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+[rank3]:     return forward_call(*args, **kwargs)
+[rank3]:   File "/home/greatwall/ELF_ordered/ELF/src/modules/model.py", line 352, in forward
+[rank3]:     decoder_logits = hidden @ self.unembed_kernel + self.unembed_bias
+[rank3]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 15.67 GiB. GPU 3 has a total capacity of 23.64 GiB of which 4.18 GiB is free. Including non-PyTorch memory, this process has 19.45 GiB memory in use. Of the allocated memory 18.90 GiB is allocated by PyTorch, and 102.30 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "/home/greatwall/ELF_ordered/ELF/src/eval.py", line 210, in <module>
+[rank1]:     main()
+[rank1]:   File "/home/greatwall/ELF_ordered/ELF/src/eval.py", line 198, in main
+[rank1]:     test_generation_uncond(**common_kwargs)
+[rank1]:   File "/home/greatwall/ELF_ordered/ELF/src/generation.py", line 180, in test_generation_uncond
+[rank1]:     predicted_ids = _dlm_decode_batch(
+[rank1]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+[rank1]:     return func(*args, **kwargs)
+[rank1]:   File "/home/greatwall/ELF_ordered/ELF/src/utils/generation_utils.py", line 201, in _dlm_decode_batch
+[rank1]:     _, decoder_logits, _ = model(
+[rank1]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:   File "/home/greatwall/ELF_ordered/ELF/src/modules/model.py", line 352, in forward
+[rank1]:     decoder_logits = hidden @ self.unembed_kernel + self.unembed_bias
+[rank1]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 15.67 GiB. GPU 1 has a total capacity of 23.64 GiB of which 4.18 GiB is free. Including non-PyTorch memory, this process has 19.45 GiB memory in use. Of the allocated memory 18.90 GiB is allocated by PyTorch, and 102.30 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+Generating samples:   0%|          | 0/2 [00:17<?, ?it/s]
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/home/greatwall/ELF_ordered/ELF/src/eval.py", line 210, in <module>
+[rank0]:     main()
+[rank0]:   File "/home/greatwall/ELF_ordered/ELF/src/eval.py", line 198, in main
+[rank0]:     test_generation_uncond(**common_kwargs)
+[rank0]:   File "/home/greatwall/ELF_ordered/ELF/src/generation.py", line 180, in test_generation_uncond
+[rank0]:     predicted_ids = _dlm_decode_batch(
+[rank0]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/utils/_contextlib.py", line 116, in decorate_context
+[rank0]:     return func(*args, **kwargs)
+[rank0]:   File "/home/greatwall/ELF_ordered/ELF/src/utils/generation_utils.py", line 201, in _dlm_decode_batch
+[rank0]:     _, decoder_logits, _ = model(
+[rank0]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1739, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:   File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1750, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:   File "/home/greatwall/ELF_ordered/ELF/src/modules/model.py", line 352, in forward
+[rank0]:     decoder_logits = hidden @ self.unembed_kernel + self.unembed_bias
+[rank0]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 15.67 GiB. GPU 0 has a total capacity of 23.64 GiB of which 4.18 GiB is free. Including non-PyTorch memory, this process has 19.45 GiB memory in use. Of the allocated memory 18.90 GiB is allocated by PyTorch, and 102.30 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+W0705 23:49:29.790000 1913785 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1913889 closing signal SIGTERM
+W0705 23:49:29.791000 1913785 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1913890 closing signal SIGTERM
+W0705 23:49:29.792000 1913785 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/api.py:897] Sending process 1913892 closing signal SIGTERM
+E0705 23:49:31.710000 1913785 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/api.py:869] failed (exitcode: 1) local_rank: 2 (pid: 1913891) of binary: /mnt/niumiaohe/miniconda3/envs/elf/bin/python
+Traceback (most recent call last):
+  File "/mnt/niumiaohe/miniconda3/envs/elf/bin/torchrun", line 6, in <module>
+    sys.exit(main())
+  File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 355, in wrapper
+    return f(*args, **kwargs)
+  File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py", line 918, in main
+    run(args)
+  File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py", line 909, in run
+    elastic_launch(
+  File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 138, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 269, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+src/eval.py FAILED
+------------------------------------------------------------
+Failures:
+  <NO_OTHER_FAILURES>
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-07-05_23:49:29
+  host      : greatwall
+  rank      : 2 (local_rank: 2)
+  exitcode  : 1 (pid: 1913891)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================

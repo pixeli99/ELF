@@ -1,0 +1,30 @@
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+Loading checkpoint: outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592
+Loaded EMA parameters.
+
+=== plan probe report ===
+{
+  "trajectory": "planning_first",
+  "alpha": 2.0,
+  "steps": 32,
+  "plan_cfg": 1.0,
+  "num_samples": 8,
+  "graft_token_change_frac": 0.36767578125,
+  "decode_shuffle_token_change_frac": 0.0006103515625,
+  "graft_latent_rel_change": 0.6246839165687561,
+  "consistency_matched": 2.394906997680664,
+  "consistency_mismatched": 2.435224771499634,
+  "consistency_graft_followed": 2.4290401935577393
+}
+
+--- A/normal sample 0 ---
+Hells is one of the stats figures: Coachs who watch Dalchan find 96 of them are at fit 39% new plays versus 90% of them are at fit down. The figures indicate these things: weak, unmatched, stupidey, and the decline of college football outside likely can’t even depend on a specific staff update status. College football is the coaches’s skills. The Washington Chargers are the pickers of the glass. A
+
+--- B/graft sample 0 ---
+Guesss is one of the fills figures: Coachs who file last season get 9% jobs they get at match time, lose about 6% of all those jobs at match time. The figures indicate these things: weak, unmatched, wasteeous, and the decline of college games industry likely can’t merge with recruiting or improving the daily job base. College games are the coaches’s skills. The Congress extendrs are the pickers of
+
+--- C/decode-shuffle sample 0 ---
+Hells is one of the stats figures: Coachs who watch Dalchan find 96 of them are at fit 39% new plays versus 90% of them are at fit down. The figures indicate these things: weak, unmatched, stupidey, and the decline of college football outside likely can’t even depend on a specific staff update status. College football is the coaches’s skills. The Washington Chargers are the pickers of the glass. A
+
+Report written to outputs/elf_b-owt-ordered/plan_probe_report.json

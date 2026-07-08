@@ -377,10 +377,12 @@ def run_training(config, *, force_cpu: bool = False):
         # find_unused_parameters=False is safe: 0-mult sinks in train_step
         # (`0 * net_out.sum()` for CE, `0 * decoder_logits.sum()` for L2)
         # keep every head in the autograd graph on every step.
+        ddp_find_unused = bool(getattr(config, "ddp_find_unused_parameters", False))
+        log_for_0(f"DDP find_unused_parameters: {ddp_find_unused}")
         state = state.replace(model=DDP(
             state.model,
             device_ids=[device.index] if device.type == "cuda" else None,
-            find_unused_parameters=False,
+            find_unused_parameters=ddp_find_unused,
             gradient_as_bucket_view=True,
             broadcast_buffers=False,
         ))
@@ -429,6 +431,7 @@ def run_training(config, *, force_cpu: bool = False):
         global_step = start_epoch * steps_per_epoch
         steps_to_skip_in_epoch = 0
     state.step = global_step
+    optimizer_step_count = global_step // max(grad_accum_steps, 1)
 
     last_log_step = global_step
     train_metrics = []
@@ -481,6 +484,20 @@ def run_training(config, *, force_cpu: bool = False):
             global_step += 1
             train_metrics.append(metrics)
             epoch_pbar.update(1)
+            if metrics.get("optimizer_step", False):
+                optimizer_step_count += 1
+
+            if (config.max_optimizer_steps is not None
+                    and optimizer_step_count >= config.max_optimizer_steps):
+                state.epoch = epoch + (step_in_epoch + 1) / max(steps_per_epoch, 1)
+                save_checkpoint(state, config.output_dir, global_step, hf_repo_id=config.hf_repo_id)
+                log_for_0(
+                    f"Reached max_optimizer_steps={config.max_optimizer_steps}, "
+                    f"optimizer_step_count={optimizer_step_count}, "
+                    f"global_step={global_step}, saving checkpoint and exiting."
+                )
+                epoch_pbar.close()
+                return
 
             if config.max_train_steps > 0 and global_step >= config.max_train_steps:
                 state.epoch = epoch + (step_in_epoch + 1) / max(steps_per_epoch, 1)

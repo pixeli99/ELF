@@ -1,0 +1,30 @@
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+Loading checkpoint: outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592
+Loaded EMA parameters.
+
+=== plan probe report ===
+{
+  "trajectory": "planning_first",
+  "alpha": 2.0,
+  "steps": 32,
+  "plan_cfg": 1.0,
+  "num_samples": 64,
+  "graft_token_change_frac": 0.3956146240234375,
+  "decode_shuffle_token_change_frac": 0.00091552734375,
+  "graft_latent_rel_change": 0.6475127339363098,
+  "consistency_matched": 2.3747456073760986,
+  "consistency_mismatched": 2.41441011428833,
+  "consistency_graft_followed": 2.4058520793914795
+}
+
+--- A/normal sample 0 ---
+Guesss is one of the stats points: Coachs who play last season average 88 percent who are at match three, and only 86 percent of those are at match one. The figures indicate these things: weak, unmatched, messey, and the decline of college football play likely can’t correlate with recruiting or a daily recruiting base. College football is the coaches’s skills. The Washington Chargers are the picke
+
+--- B/graft sample 0 ---
+Guesss is one of the messing figures: architects who file spend tasks generally have less tasks than the total installed and thus lose about 6% of all their work wages going through. The figures suggest these things are thick, over expensive, wasteeous, and the loss of most work budget likely can’t rest with licensing neither training nor staff update capacity. Task management are the architects’s
+
+--- C/decode-shuffle sample 0 ---
+Guesss is one of the stats points: Coachs who play last season average 88 percent who are at match three, and only 86 percent of those are at match one. The figures indicate these things: weak, unmatched, messey, and the decline of college football play likely can’t correlate with recruiting or a daily recruiting base. College football is the coaches’s skills. The Washington Chargers are the picke
+
+Report written to outputs/elf_b-owt-ordered/plan_probe_report.json

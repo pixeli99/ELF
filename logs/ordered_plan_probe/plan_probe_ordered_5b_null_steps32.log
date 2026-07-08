@@ -1,0 +1,30 @@
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+Loading checkpoint: outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592
+Loaded EMA parameters.
+
+=== plan probe report ===
+{
+  "trajectory": "null",
+  "alpha": 0.0,
+  "steps": 32,
+  "plan_cfg": 1.0,
+  "num_samples": 8,
+  "graft_token_change_frac": 0.3525390625,
+  "decode_shuffle_token_change_frac": 0.0013427734375,
+  "graft_latent_rel_change": 0.6183831095695496,
+  "consistency_matched": 1.104390025138855,
+  "consistency_mismatched": 1.1032475233078003,
+  "consistency_graft_followed": 1.1079044342041016
+}
+
+--- A/normal sample 0 ---
+Thiss is one of the statistics key points: employers who measure commitr generally have less jobs than the total limit and now lose about 6% of all their job costs going through. The figures indicate that it is thin, unsustainable, wasteeous, and the decline of most work market likely can’t rest around hiring or increase of staff deployment capacity. Work managers are the companies’s skills, but l
+
+--- B/graft sample 0 ---
+Thiss is one of the statistical key figures: employers who files commit help generally have less jobs than are at limits and workers lose about 6% of all their hiring costs going through. The figures suggest these things are weak, over variable, wasteeous, and the decline of most work industry likely can’t rest around hiring or increase of staff deployment capacity. Work managers are the employers
+
+--- C/decode-shuffle sample 0 ---
+Thiss is one of the statistics key points: employers who measure commitr generally have less jobs than the total limit and now lose about 6% of all their job costs going through. The figures indicate that it is thin, unsustainable, wasteeous, and the decline of most work market likely can’t rest around hiring or increase of staff deployment capacity. Work managers are the companies’s skills, but l
+
+Report written to outputs/elf_b-owt-ordered/plan_probe_report.json

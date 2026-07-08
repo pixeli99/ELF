@@ -1,0 +1,97 @@
+[launch] torchrun nproc_per_node=4 nnodes=1 node_rank=0 src/eval.py
+W0706 14:34:45.387000 2426897 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] 
+W0706 14:34:45.387000 2426897 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] *****************************************
+W0706 14:34:45.387000 2426897 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W0706 14:34:45.387000 2426897 /workspace/greatwall/miniconda3/envs/elf/lib/python3.10/site-packages/torch/distributed/run.py:792] *****************************************
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+INFO - __main__ - Loading configuration...
+INFO - __main__ - Applied 8 config override(s)
+INFO - __main__ - Using global batch size for evaluation: 32
+INFO - __main__ - Config loaded from src/configs/training_configs/train_owt_ELF-B_register.yml
+INFO - __main__ - Model: ELF-B
+INFO - __main__ - Encoder Model: t5-small
+INFO - __main__ - Encoder Checkpoint: None
+INFO - __main__ - Max length: 1024
+INFO - __main__ - Max input length: None
+INFO - __main__ - Num samples: 100
+INFO - __main__ - Sampling configs: 1 config(s)
+INFO - __main__ - paired_trajectory_eval=True
+INFO - __main__ - paired_eval_base_seed=42
+INFO - __main__ - Paired eval seed excludes sampling config index, trajectory, and alpha.
+INFO - __main__ - BF16 autocast (sampling): True
+INFO - __main__ - torch.compile (eval model): False
+INFO - __main__ - Seeds to evaluate: [42]
+INFO - __main__ - Loading tokenizer...
+INFO - __main__ - Using PAD token for padding: 0
+INFO - __main__ - Loading Encoder: t5-small...
+INFO - modules.t5_encoder - Loading T5 Encoder: t5-small...
+INFO - __main__ - Creating ELF-B model...
+INFO - utils.muon_utils - Muon: 62 2D params; Nesterov-AdamW: 116 other params
+INFO - utils.train_utils - Using Muon optimizer
+INFO - __main__ - Loading checkpoint from: outputs/elf_b-owt-register-5b-4g/checkpoint_152592
+INFO - utils.checkpoint_utils - Loading ELF checkpoint from outputs/elf_b-owt-register-5b-4g/checkpoint_152592...
+INFO - utils.checkpoint_utils - Loading local checkpoint from /home/greatwall/ELF_ordered/ELF/outputs/elf_b-owt-register-5b-4g/checkpoint_152592...
+INFO - utils.checkpoint_utils - Loaded checkpoint keys: ['params', 'ema_params1', 'opt_state', 'lr_scheduler', 'step', 'epoch', 'dropout_rng', 'grad_accum_buffers']
+INFO - utils.checkpoint_utils - Loaded local checkpoint from step 152592 (epoch 0)
+INFO - generation - Config: SamplingConfig(sampling_method='sde', num_sampling_steps=[32, 8], cfgs=[1], sde_gamma=1.5, self_cond_cfg_scales=[3], time_schedule='logit_normal', plan_trajectory='null', plan_lead_alpha=2.0, plan_cfg_scale=1.0)
+INFO - generation - Strict null decode enabled: plan stays pure noise with t_plan=0 through decode.
+INFO - generation - 
+======================================================================
+INFO - generation -               UNCONDITIONAL GENERATION EXAMPLES
+INFO - generation - ======================================================================
+INFO - generation - Per-device batch size: 8
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1601: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be depracted in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1601: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be depracted in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1601: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be depracted in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
+  warnings.warn(
+INFO - generation - Paired trajectory eval enabled: seed depends on base seed, eval seed, rank, sampling steps, and batch index; it excludes trajectory/config index.
+INFO - generation - 
+--- Method: sde, Steps: 32, CFG Scale: 1, SC-CFG: 3 ---
+Generating samples:   0%|          | 0/4 [00:00<?, ?it/s]/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:1601: FutureWarning: `clean_up_tokenization_spaces` was not set. It will be set to `True` by default. This behavior will be depracted in transformers v4.45, and will be then set to `False` by default. For more details check this issue: https://github.com/huggingface/transformers/issues/31884
+  warnings.warn(
+Generating samples:  25%|██▌       | 1/4 [00:01<00:03,  1.06s/it]Generating samples:  50%|█████     | 2/4 [00:01<00:01,  1.10it/s]Generating samples:  75%|███████▌  | 3/4 [00:02<00:00,  1.17it/s]Generating samples: 100%|██████████| 4/4 [00:03<00:00,  1.43it/s]Generating samples: 100%|██████████| 4/4 [00:03<00:00,  1.29it/s]
+INFO - generation - Generation: 2.91s (32 steps) | Decode: 0.11s
+INFO - generation - ----------------------------------------------------------------------
+INFO - generation - Saved 100 generated texts to outputs/eval_register_5b_4g_smoke/sde-steps32-cfg1-sccfg3-ts_logit_normal-gamma1.5-plan_null-uncond/all_generated_0_152592.jsonl
+INFO - generation - 
+======================================================================
+INFO - generation -               PPL EVALUATION
+INFO - generation - ======================================================================
+INFO - utils.metrics_utils - Loading PyTorch model: gpt2-large
+INFO - utils.metrics_utils - PPL model cached for reuse
+INFO - utils.metrics_utils - PPL: batch_size=4, 25 batches
+Evaluating perplexity:   0%|          | 0/25 [00:00<?, ?it/s]Evaluating perplexity:   4%|▍         | 1/25 [00:00<00:03,  7.58it/s]Evaluating perplexity:  12%|█▏        | 3/25 [00:00<00:02, 10.31it/s]Evaluating perplexity:  20%|██        | 5/25 [00:00<00:01, 11.04it/s]Evaluating perplexity:  28%|██▊       | 7/25 [00:00<00:01, 11.35it/s]Evaluating perplexity:  36%|███▌      | 9/25 [00:00<00:01, 11.51it/s]Evaluating perplexity:  44%|████▍     | 11/25 [00:00<00:01, 11.61it/s]Evaluating perplexity:  52%|█████▏    | 13/25 [00:01<00:01, 11.67it/s]Evaluating perplexity:  60%|██████    | 15/25 [00:01<00:00, 11.71it/s]Evaluating perplexity:  68%|██████▊   | 17/25 [00:01<00:00, 11.71it/s]Evaluating perplexity:  76%|███████▌  | 19/25 [00:01<00:00, 11.74it/s]Evaluating perplexity:  84%|████████▍ | 21/25 [00:01<00:00, 11.76it/s]Evaluating perplexity:  92%|█████████▏| 23/25 [00:01<00:00, 11.77it/s]Evaluating perplexity: 100%|██████████| 25/25 [00:02<00:00, 11.77it/s]Evaluating perplexity: 100%|██████████| 25/25 [00:02<00:00, 11.53it/s]
+INFO - generation - Perplexity: 23.2293
+INFO - generation - Mean Entropy: 5.1102
+INFO - generation - ======================================================================
+
+INFO - generation - 
+--- Method: sde, Steps: 8, CFG Scale: 1, SC-CFG: 3 ---
+Generating samples:   0%|          | 0/4 [00:00<?, ?it/s]Generating samples:  25%|██▌       | 1/4 [00:00<00:00,  4.42it/s]Generating samples:  50%|█████     | 2/4 [00:00<00:00,  4.43it/s]Generating samples:  75%|███████▌  | 3/4 [00:00<00:00,  4.42it/s]Generating samples: 100%|██████████| 4/4 [00:00<00:00,  5.38it/s]Generating samples: 100%|██████████| 4/4 [00:00<00:00,  4.99it/s]
+INFO - generation - Generation: 0.65s (8 steps) | Decode: 0.09s
+INFO - generation - ----------------------------------------------------------------------
+INFO - generation - Saved 100 generated texts to outputs/eval_register_5b_4g_smoke/sde-steps8-cfg1-sccfg3-ts_logit_normal-gamma1.5-plan_null-uncond/all_generated_0_152592.jsonl
+INFO - generation - 
+======================================================================
+INFO - generation -               PPL EVALUATION
+INFO - generation - ======================================================================
+INFO - generation - PPL eval: skipped 2 empty samples
+INFO - utils.metrics_utils - PPL: batch_size=4, 25 batches
+Evaluating perplexity:   0%|          | 0/25 [00:00<?, ?it/s]Evaluating perplexity:   8%|▊         | 2/25 [00:00<00:01, 11.75it/s]Evaluating perplexity:  16%|█▌        | 4/25 [00:00<00:01, 11.74it/s]Evaluating perplexity:  24%|██▍       | 6/25 [00:00<00:01, 11.75it/s]Evaluating perplexity:  32%|███▏      | 8/25 [00:00<00:01, 11.75it/s]Evaluating perplexity:  40%|████      | 10/25 [00:00<00:01, 11.75it/s]Evaluating perplexity:  48%|████▊     | 12/25 [00:01<00:01, 11.75it/s]Evaluating perplexity:  56%|█████▌    | 14/25 [00:01<00:00, 11.75it/s]Evaluating perplexity:  64%|██████▍   | 16/25 [00:01<00:00, 11.75it/s]Evaluating perplexity:  72%|███████▏  | 18/25 [00:01<00:00, 11.86it/s]Evaluating perplexity:  80%|████████  | 20/25 [00:01<00:00, 11.82it/s]Evaluating perplexity:  88%|████████▊ | 22/25 [00:01<00:00, 11.80it/s]Evaluating perplexity:  96%|█████████▌| 24/25 [00:02<00:00, 12.02it/s]Evaluating perplexity: 100%|██████████| 25/25 [00:02<00:00, 12.10it/s]
+INFO - generation - Perplexity: 89.0639
+INFO - generation - Mean Entropy: 5.3349
+INFO - generation - ======================================================================
+
+INFO - generation - ======================================================================
+
+INFO - __main__ - 
+Evaluation complete!

@@ -179,18 +179,28 @@ def _generate_samples_single_batch(
 
 @torch.no_grad()
 def _dlm_decode_batch(z: torch.Tensor, model: nn.Module, t_final_val,
-                      config, self_cond_cfg_scale: float, x_plan=None) -> torch.Tensor:
+                      config, self_cond_cfg_scale: float, x_plan=None,
+                      t_plan_decode_val: Optional[float] = None,
+                      plan_trajectory: Optional[str] = None) -> torch.Tensor:
     """Decode z -> tokens with the DLM decoder head.
 
-    x_plan: the evolved plan latent (at t_plan=1) for a plan-enabled model, so the decoder
-    is conditioned on the plan exactly as during training. None for a vanilla model.
+    Normal ordered trajectories (diagonal / planning_first / lagging) decode with
+    t_plan=1 so the decoder sees a finished clean-plan condition. The strict null
+    ablation is different: it keeps a pure-noise plan at t_plan=0 through sampling
+    and decode, measuring an inference-time no-plan control rather than a path to
+    the (t_tok=1, t_plan=1) endpoint. None for a vanilla model.
     """
     batch_size = z.shape[0]
     if isinstance(t_final_val, torch.Tensor) and t_final_val.dim() == 0:
         t_final = torch.full((batch_size,), t_final_val.item(), dtype=z.dtype, device=z.device)
     else:
         t_final = torch.full((batch_size,), float(t_final_val), dtype=z.dtype, device=z.device)
-    t_plan = None if x_plan is None else torch.full((batch_size,), 1.0, dtype=z.dtype, device=z.device)
+    if x_plan is None:
+        t_plan = None
+    else:
+        if t_plan_decode_val is None:
+            t_plan_decode_val = 0.0 if plan_trajectory == "null" else 1.0
+        t_plan = torch.full((batch_size,), float(t_plan_decode_val), dtype=z.dtype, device=z.device)
     sc_batch = (
         torch.full((batch_size,), float(self_cond_cfg_scale), dtype=z.dtype, device=z.device)
         if config.num_self_cond_cfg_tokens > 0 else None

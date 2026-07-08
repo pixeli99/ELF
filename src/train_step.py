@@ -376,5 +376,6 @@ def train_step(
         "l2_loss": l2_loss_val,
         "ce_loss": ce_loss_val,
         "plan_l2_loss": plan_l2_val,
+        "optimizer_step": is_optimizer_step,
     }
     return state, metrics

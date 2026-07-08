@@ -134,7 +134,9 @@ class Config:
     use_bf16: bool = True  # Use CUDA BF16 autocast for training/eval forward passes.
     use_compile: bool = False  # Wrap the eval/sampling model in torch.compile.
     gradient_checkpointing: bool = False  # Save activation memory by recomputing ELF blocks during backward.
+    ddp_find_unused_parameters: bool = False
     max_train_steps: int = -1  # Debug only; if >0 stop training after this many global training steps.
+    max_optimizer_steps: int = None
 
     # EMA
     ema_decay1: float = 0.9999
@@ -144,6 +146,10 @@ class Config:
     # Sampling configs sweep (list of SamplingConfig objects, loaded from YAML)
     sampling_configs: list = [SamplingConfig()]
     num_samples: int = 100
+    # Eval-only paired trajectory ablation. When enabled, trajectories with the same
+    # seed/rank/step-count/batch use the same RNG stream; trajectory identity is excluded.
+    paired_trajectory_eval: bool = False
+    paired_eval_base_seed: int = 42
 
     # PPL Evaluation
     online_eval: bool = True  # Enable PPL evaluation for generated samples

@@ -1,0 +1,9 @@
+trajectory,alpha,steps,num_samples,gen_ppl,entropy,output_dir
+diagonal,1.0,32,1000,26.9654,5.2033,outputs/eval_ordered_5b_4g_full_seed42_b32/sde-steps32-cfg1-sccfg3-ts_logit_normal-gamma1.5-plan_diagonal-uncond
+planning_first,2.0,32,1000,28.2820,5.2076,outputs/eval_ordered_5b_4g_full_seed42_b32/sde-steps32-cfg1-sccfg3-ts_logit_normal-gamma1.5-plan_planning_first_a2.0-uncond
+lagging,0.5,32,1000,27.1437,5.2107,outputs/eval_ordered_5b_4g_full_seed42_b32/sde-steps32-cfg1-sccfg3-ts_logit_normal-gamma1.5-plan_planning_first_a0.5-uncond
+null,0.0,32,1000,26.3846,5.2028,outputs/eval_ordered_5b_4g_full_seed42_b32/sde-steps32-cfg1-sccfg3-ts_logit_normal-gamma1.5-plan_null-uncond
+diagonal,1.0,8,1000,110.3784,5.4516,outputs/eval_ordered_5b_4g_full_seed42_b32/sde-steps8-cfg1-sccfg3-ts_logit_normal-gamma1.5-plan_diagonal-uncond
+planning_first,2.0,8,1000,112.5442,5.4513,outputs/eval_ordered_5b_4g_full_seed42_b32/sde-steps8-cfg1-sccfg3-ts_logit_normal-gamma1.5-plan_planning_first_a2.0-uncond
+lagging,0.5,8,1000,112.6720,5.4489,outputs/eval_ordered_5b_4g_full_seed42_b32/sde-steps8-cfg1-sccfg3-ts_logit_normal-gamma1.5-plan_planning_first_a0.5-uncond
+null,0.0,8,1000,105.9640,5.4293,outputs/eval_ordered_5b_4g_full_seed42_b32/sde-steps8-cfg1-sccfg3-ts_logit_normal-gamma1.5-plan_null-uncond

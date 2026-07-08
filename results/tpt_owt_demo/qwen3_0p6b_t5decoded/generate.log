@@ -1,0 +1,128 @@
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+Loading T5 tokenizer for decoding input_ids...
+Loading Qwen generator: Qwen/Qwen3-0.6B
+Loading weights:   0%|          | 0/311 [00:00<?, ?it/s]Loading weights:  38%|███▊      | 119/311 [00:00<00:00, 1185.28it/s]Loading weights:  99%|█████████▊| 307/311 [00:00<00:00, 1592.05it/s]Loading weights: 100%|██████████| 311/311 [00:00<00:00, 1544.37it/s]
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading dataset: embedded-language-flows/openwebtext-t5
+[1/100] context_tokens=896, thinking_tokens=454
+[2/100] context_tokens=843, thinking_tokens=495
+[3/100] context_tokens=938, thinking_tokens=572
+[4/100] context_tokens=860, thinking_tokens=633
+[5/100] context_tokens=843, thinking_tokens=350
+[6/100] context_tokens=900, thinking_tokens=442
+[7/100] context_tokens=869, thinking_tokens=334
+[8/100] context_tokens=714, thinking_tokens=614
+[9/100] context_tokens=893, thinking_tokens=467
+[10/100] context_tokens=918, thinking_tokens=397
+[11/100] context_tokens=892, thinking_tokens=453
+[12/100] context_tokens=910, thinking_tokens=553
+[13/100] context_tokens=922, thinking_tokens=527
+[14/100] context_tokens=851, thinking_tokens=335
+[15/100] context_tokens=792, thinking_tokens=318
+[16/100] context_tokens=869, thinking_tokens=541
+[17/100] context_tokens=922, thinking_tokens=301
+[18/100] context_tokens=900, thinking_tokens=404
+[19/100] context_tokens=950, thinking_tokens=533
+[20/100] context_tokens=933, thinking_tokens=459
+[21/100] context_tokens=935, thinking_tokens=365
+[22/100] context_tokens=892, thinking_tokens=523
+[23/100] context_tokens=919, thinking_tokens=310
+[24/100] context_tokens=878, thinking_tokens=319
+[25/100] context_tokens=875, thinking_tokens=454
+[26/100] context_tokens=957, thinking_tokens=544
+[27/100] context_tokens=935, thinking_tokens=650
+[28/100] context_tokens=877, thinking_tokens=585
+[29/100] context_tokens=907, thinking_tokens=398
+[30/100] context_tokens=907, thinking_tokens=410
+[31/100] context_tokens=859, thinking_tokens=433
+[32/100] context_tokens=892, thinking_tokens=385
+[33/100] context_tokens=913, thinking_tokens=447
+[34/100] context_tokens=894, thinking_tokens=451
+[35/100] context_tokens=867, thinking_tokens=616
+[36/100] context_tokens=760, thinking_tokens=883
+[37/100] context_tokens=878, thinking_tokens=438
+[38/100] context_tokens=895, thinking_tokens=294
+[39/100] context_tokens=846, thinking_tokens=451
+[40/100] context_tokens=778, thinking_tokens=406
+[41/100] context_tokens=882, thinking_tokens=346
+[42/100] context_tokens=969, thinking_tokens=464
+[43/100] context_tokens=884, thinking_tokens=497
+[44/100] context_tokens=971, thinking_tokens=364
+[45/100] context_tokens=941, thinking_tokens=342
+[46/100] context_tokens=1033, thinking_tokens=418
+[47/100] context_tokens=943, thinking_tokens=398
+[48/100] context_tokens=836, thinking_tokens=549
+[49/100] context_tokens=1014, thinking_tokens=521
+[50/100] context_tokens=1011, thinking_tokens=564
+[51/100] context_tokens=903, thinking_tokens=362
+[52/100] context_tokens=845, thinking_tokens=559
+[53/100] context_tokens=929, thinking_tokens=522
+[54/100] context_tokens=991, thinking_tokens=332
+[55/100] context_tokens=934, thinking_tokens=255
+[56/100] context_tokens=886, thinking_tokens=444
+[57/100] context_tokens=784, thinking_tokens=387
+[58/100] context_tokens=866, thinking_tokens=580
+[59/100] context_tokens=790, thinking_tokens=465
+[60/100] context_tokens=875, thinking_tokens=477
+[61/100] context_tokens=842, thinking_tokens=532
+[62/100] context_tokens=836, thinking_tokens=462
+[63/100] context_tokens=834, thinking_tokens=598
+[64/100] context_tokens=872, thinking_tokens=483
+[65/100] context_tokens=830, thinking_tokens=503
+[66/100] context_tokens=1145, thinking_tokens=386
+[67/100] context_tokens=934, thinking_tokens=492
+[68/100] context_tokens=964, thinking_tokens=289
+[69/100] context_tokens=863, thinking_tokens=371
+[70/100] context_tokens=880, thinking_tokens=327
+[71/100] context_tokens=729, thinking_tokens=480
+[72/100] context_tokens=937, thinking_tokens=446
+[73/100] context_tokens=424, thinking_tokens=377
+[74/100] context_tokens=935, thinking_tokens=382
+[75/100] context_tokens=933, thinking_tokens=722
+[76/100] context_tokens=892, thinking_tokens=479
+[77/100] context_tokens=959, thinking_tokens=559
+[78/100] context_tokens=847, thinking_tokens=562
+[79/100] context_tokens=902, thinking_tokens=480
+[80/100] context_tokens=872, thinking_tokens=632
+[81/100] context_tokens=923, thinking_tokens=376
+[82/100] context_tokens=912, thinking_tokens=559
+[83/100] context_tokens=860, thinking_tokens=380
+[84/100] context_tokens=798, thinking_tokens=471
+[85/100] context_tokens=881, thinking_tokens=314
+[86/100] context_tokens=872, thinking_tokens=371
+[87/100] context_tokens=939, thinking_tokens=497
+[88/100] context_tokens=848, thinking_tokens=489
+[89/100] context_tokens=873, thinking_tokens=401
+[90/100] context_tokens=833, thinking_tokens=323
+[91/100] context_tokens=829, thinking_tokens=360
+[92/100] context_tokens=820, thinking_tokens=395
+[93/100] context_tokens=1255, thinking_tokens=269
+[94/100] context_tokens=927, thinking_tokens=488
+[95/100] context_tokens=924, thinking_tokens=242
+[96/100] context_tokens=853, thinking_tokens=346
+[97/100] context_tokens=903, thinking_tokens=418
+[98/100] context_tokens=884, thinking_tokens=574
+[99/100] context_tokens=769, thinking_tokens=352
+[100/100] context_tokens=864, thinking_tokens=675
+
+Done.
+Wrote results/tpt_owt_demo/qwen3_0p6b_t5decoded/tpt_owt_t5decoded_100_demo.csv
+Wrote results/tpt_owt_demo/qwen3_0p6b_t5decoded/tpt_owt_t5decoded_100_demo.xlsx
+Wrote results/tpt_owt_demo/qwen3_0p6b_t5decoded/tpt_owt_t5decoded_100_demo.jsonl
+Wrote results/tpt_owt_demo/qwen3_0p6b_t5decoded/tpt_owt_t5decoded_100_summary.json
+{
+  "num_samples": 100,
+  "dataset": "embedded-language-flows/openwebtext-t5",
+  "generator_model": "Qwen/Qwen3-0.6B",
+  "decode_tokenizer": "t5-small",
+  "context_max_tokens": 2048,
+  "max_new_tokens": 8192,
+  "temperature": 0.6,
+  "top_p": 0.9,
+  "context_tokens_mean": 887.63,
+  "context_tokens_median": 889.0,
+  "thinking_tokens_mean": 452.52,
+  "thinking_tokens_median": 451.0,
+  "thinking_tokens_min": 242,
+  "thinking_tokens_max": 883
+}

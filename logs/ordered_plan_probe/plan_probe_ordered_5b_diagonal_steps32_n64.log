@@ -1,0 +1,30 @@
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+Loading checkpoint: outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592
+Loaded EMA parameters.
+
+=== plan probe report ===
+{
+  "trajectory": "diagonal",
+  "alpha": 1.0,
+  "steps": 32,
+  "plan_cfg": 1.0,
+  "num_samples": 64,
+  "graft_token_change_frac": 0.3884429931640625,
+  "decode_shuffle_token_change_frac": 0.000823974609375,
+  "graft_latent_rel_change": 0.6428704261779785,
+  "consistency_matched": 2.36649751663208,
+  "consistency_mismatched": 2.4135327339172363,
+  "consistency_graft_followed": 2.408273935317993
+}
+
+--- A/normal sample 0 ---
+Facts is one of the contents figures: Architectures who design execute then generally have less projects than the sum required and thus lose about 6% of all their work wages going through. The figures suggest these things are slow, over expensive, time-consuming, and the decline of most project budget likely can’t rest with design neither training nor staff update capacity. Effect management are t
+
+--- B/graft sample 0 ---
+Waits is one of the statistics key points: Authors who produce Ag Tool generally have less projects than are total completed and now lose about 6% of all their project requests going through. The figures suggest these things are weak, oversustainable, wasteeous, and the decline of most project industry likely can’t rest with marketing neither training nor staff deployment capacity. Advanced Design
+
+--- C/decode-shuffle sample 0 ---
+Facts is one of the contents figures: Architectures who design execute then generally have less projects than the sum required and thus lose about 6% of all their work wages going through. The figures suggest these things are slow, over expensive, time-consuming, and the decline of most project budget likely can’t rest with design neither training nor staff update capacity. Effect management are t
+
+Report written to outputs/elf_b-owt-ordered/plan_probe_report.json

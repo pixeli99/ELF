@@ -1,0 +1,30 @@
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+Loading checkpoint: outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592
+Loaded EMA parameters.
+
+=== plan probe report ===
+{
+  "trajectory": "null",
+  "alpha": 0.0,
+  "steps": 32,
+  "plan_cfg": 1.0,
+  "num_samples": 64,
+  "graft_token_change_frac": 0.38812255859375,
+  "decode_shuffle_token_change_frac": 0.001434326171875,
+  "graft_latent_rel_change": 0.6606162786483765,
+  "consistency_matched": 1.103745698928833,
+  "consistency_mismatched": 1.1050398349761963,
+  "consistency_graft_followed": 1.105107307434082
+}
+
+--- A/normal sample 0 ---
+Thiss is one of the statistics key points: Agents who produce give help generally have less tasks than the total met and now lose about 6% of all their building costs going through. The figures suggest these parts are weak, over variable, wasteeous, and the decline of most work market likely can’t rest with marketing neither training nor staff update capacity. Task managers are the builders’s skil
+
+--- B/graft sample 0 ---
+Thiss is one of the numbers’ points: Watchers who watch Dalrophy average 88 percent they are at match three, and only 86 percent of them are at match three. The numbers indicate these things: weak, unmatched, fooley, and the decline of most players outside hopes can’t even depend on a specific staff update status. Science football is the players’s talent. The Washington Chargers are the pickers of
+
+--- C/decode-shuffle sample 0 ---
+Thiss is one of the statistics key points: Agents who produce give help generally have less tasks than the total met and now lose about 6% of all their building costs going through. The figures suggest these parts are weak, over variable, wasteeous, and the decline of most work market likely can’t rest with marketing neither training nor staff update capacity. Task managers are the builders’s skil
+
+Report written to outputs/elf_b-owt-ordered/plan_probe_report.json

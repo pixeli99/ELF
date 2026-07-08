@@ -1,0 +1,395 @@
+
+========== 2026-07-03 16:05:09 | STAGE 00: script started ==========
+RUN_ID=20260703_160509
+PWD=/home/greatwall/ELF_ordered/ELF
+HOST=greatwall
+USER=greatwall
+LOG_DIR=logs/ordered_full/debug_20260703_160509
+
+========== 2026-07-03 16:05:09 | STAGE 01: env check ==========
+CONDA_DEFAULT_ENV=elf
+CONDA_PREFIX=/mnt/niumiaohe/miniconda3/envs/elf
+PATH=/mnt/niumiaohe/miniconda3/envs/elf/bin:/home/greatwall/.vscode-server/data/User/globalStorage/github.copilot-chat/debugCommand:/home/greatwall/.vscode-server/data/User/globalStorage/github.copilot-chat/copilotCli:/home/greatwall/.vscode-server/cli/servers/Stable-4fe60c8b1cdac1c4c174f2fb180d0d758272d713/server/bin/remote-cli:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/home/greatwall/.vscode-server/extensions/ms-python.debugpy-2026.6.0-linux-x64/bundled/scripts/noConfigScripts
+python=/mnt/niumiaohe/miniconda3/envs/elf/bin/python
+pip=/mnt/niumiaohe/miniconda3/envs/elf/bin/pip
+torchrun=/mnt/niumiaohe/miniconda3/envs/elf/bin/torchrun
+Python 3.10.20
+pip 26.1.2 from /mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/pip (python 3.10)
+torch 2.6.0+cu124
+cuda True
+n_gpu 8
+
+========== 2026-07-03 16:05:20 | STAGE 02: system check ==========
+ 16:05:20 up 14 min,  1 user,  load average: 0.62, 0.61, 0.63
+               total        used        free      shared  buff/cache   available
+Mem:           503Gi        11Gi       488Gi        73Mi       3.6Gi       489Gi
+Swap:          8.0Gi          0B       8.0Gi
+Fri Jul  3 16:05:24 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.54.14              Driver Version: 550.54.14      CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 4090        Off |   00000000:01:00.0 Off |                  Off |
+| 31%   31C    P0             47W /  450W |       0MiB /  24564MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA GeForce RTX 4090        Off |   00000000:24:00.0 Off |                  Off |
+| 30%   31C    P0             57W /  450W |       0MiB /  24564MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   2  NVIDIA GeForce RTX 4090        Off |   00000000:41:00.0 Off |                  Off |
+| 30%   36C    P0             51W /  450W |       0MiB /  24564MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   3  NVIDIA GeForce RTX 4090        Off |   00000000:61:00.0 Off |                  Off |
+| 30%   32C    P0             51W /  450W |       0MiB /  24564MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   4  NVIDIA GeForce RTX 4090        Off |   00000000:81:00.0 Off |                  Off |
+| 31%   31C    P0             56W /  450W |       0MiB /  24564MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   5  NVIDIA GeForce RTX 4090        Off |   00000000:A1:00.0 Off |                  Off |
+| 30%   31C    P0             65W /  450W |       0MiB /  24564MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   6  NVIDIA GeForce RTX 4090        Off |   00000000:C1:00.0 Off |                  Off |
+| 30%   31C    P0             46W /  450W |       0MiB /  24564MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+|   7  NVIDIA GeForce RTX 4090        Off |   00000000:E1:00.0 Off |                  Off |
+| 30%   31C    P0             51W /  450W |       0MiB /  24564MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+GPU 0: NVIDIA GeForce RTX 4090 (UUID: GPU-12b7fb06-caa8-492e-cd40-b4a3ce2863d1)
+GPU 1: NVIDIA GeForce RTX 4090 (UUID: GPU-75dc630a-357f-8197-7236-ff8b78035456)
+GPU 2: NVIDIA GeForce RTX 4090 (UUID: GPU-2c9803ac-65e6-970b-bd0c-be0a1ce93e90)
+GPU 3: NVIDIA GeForce RTX 4090 (UUID: GPU-94287bb3-5ba2-bf85-eb63-07909ea358dd)
+GPU 4: NVIDIA GeForce RTX 4090 (UUID: GPU-93f892c1-9d90-e6cf-e172-83a12d8e57c4)
+GPU 5: NVIDIA GeForce RTX 4090 (UUID: GPU-0daa84f0-1291-231b-1cfb-dd00f8edd4da)
+GPU 6: NVIDIA GeForce RTX 4090 (UUID: GPU-5f9c5687-b8f0-3b26-c887-cad83982a788)
+GPU 7: NVIDIA GeForce RTX 4090 (UUID: GPU-ff1814f8-8d2f-d6d3-9f28-9bfd959554f5)
+
+========== 2026-07-03 16:05:31 | STAGE 03: checkpoint/output check ==========
+CKPT=/workspace/greatwall/ELF_repro/hf_cache/hub/models--embedded-language-flows--ELF-B-owt-torch/snapshots/146f84133c1389bfd4ef47f14ec7a955da22faa7/checkpoint_95085
+lrwxrwxrwx 1 greatwall greatwall 76 Jun 13 11:56 /workspace/greatwall/ELF_repro/hf_cache/hub/models--embedded-language-flows--ELF-B-owt-torch/snapshots/146f84133c1389bfd4ef47f14ec7a955da22faa7/checkpoint_95085 -> ../../blobs/52c21bfb7f920e785e0e780645c411c94e4541af4cee8f85b6f555f826d4c283
+Existing output dir:
+total 12K
+drwxrwxr-x 2 greatwall greatwall 4.0K Jul  3 15:45 .
+drwxrwxr-x 7 greatwall greatwall 4.0K Jul  3 15:45 ..
+-rw-rw-r-- 1 greatwall greatwall 2.2K Jul  3 15:45 config.yml
+Existing checkpoints:
+
+========== 2026-07-03 16:05:31 | STAGE 04: start background monitors ==========
+HEART_PID=28575
+GPU_PID=28576
+HEART_LOG=logs/ordered_full/debug_20260703_160509/heartbeat.log
+GPU_LOG=logs/ordered_full/debug_20260703_160509/gpu_watch.log
+
+========== 2026-07-03 16:05:31 | STAGE 05: before torchrun launch ==========
+Launch command:
+NGPU=8 bash scripts/launch.sh train src/configs/training_configs/train_owt_ELF-B_ordered.yml ...
+[launch] torchrun nproc_per_node=8 nnodes=1 node_rank=0 src/train.py
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/mnt/niumiaohe/miniconda3/envs/elf/lib/python3.10/site-packages/transformers/utils/hub.py:127: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+INFO - __main__ - Applied 6 config override(s)
+INFO - __main__ - ============================================================
+INFO - __main__ - ELF Diffusion Model Training (PyTorch)
+INFO - __main__ - ============================================================
+INFO - __main__ - Model: ELF-B
+INFO - __main__ - Encoder Model: t5-small
+INFO - __main__ - Encoder Checkpoint: None
+INFO - __main__ - Data: embedded-language-flows/openwebtext-t5
+INFO - __main__ - Max sequence length: 1024
+INFO - __main__ - Output dir: outputs/elf_b-owt-ordered
+INFO - __main__ - HF Repo ID: None
+INFO - __main__ - Batch size per device: None
+INFO - __main__ - Number of epochs: 5
+INFO - __main__ - PyTorch device: cuda:0, world_size=8
+INFO - __main__ - BF16 autocast: True
+INFO - __main__ - Gradient checkpointing: True
+INFO - __main__ - ============================================================
+INFO - __main__ - Loading tokenizer...
+INFO - __main__ - Using PAD token for padding: 0
+INFO - utils.data_utils - Loading dataset from embedded-language-flows/openwebtext-t5...
+INFO - utils.data_utils - Train size: 9737184
+INFO - utils.data_utils - No eval dataset
+INFO - __main__ - Loading Encoder config: t5-small...
+INFO - modules.t5_encoder - Loading T5 Encoder: t5-small...
+INFO - __main__ - Encoder d_model: 512
+INFO - __main__ - Creating ELF-B model...
+INFO - __main__ - Tokenizer vocab: CE head=32100
+INFO - __main__ - ELF parameters: 106,171,748
+INFO - __main__ - Total trainable parameters: 106,171,748
+INFO - utils.checkpoint_utils - Warm-starting model from /workspace/greatwall/ELF_repro/hf_cache/hub/models--embedded-language-flows--ELF-B-owt-torch/snapshots/146f84133c1389bfd4ef47f14ec7a955da22faa7/checkpoint_95085 (strict=False, prefer_ema=True)...
+INFO - utils.checkpoint_utils - Loaded model params from local:ema_params1: 167 tensors
+INFO - utils.checkpoint_utils - Warm-start missing keys: 14 [plan_slot_embed, plan_t_emb_tokens, plan_target_mean, plan_target_std, plan_whiten_ready, plan_in_proj.weight, plan_in_proj.bias, plan_t_embedder.mlp_0.weight, plan_t_embedder.mlp_0.bias, plan_t_embedder.mlp_2.weight, plan_t_embedder.mlp_2.bias, plan_norm.weight, plan_head.weight, plan_head.bias]
+INFO - utils.checkpoint_utils - Warm-start unexpected keys: 0
+INFO - utils.checkpoint_utils - Warm-start shape-skipped keys: 0
+INFO - __main__ - Using global batch size: 64
+INFO - __main__ - World=8 | batch local=8, total=64 | steps/epoch=152143, total_train=760715, warmup=76071, lr=2.00e-03
+INFO - __main__ - Grad accum=8, effective batch=512, optimizer steps=95089
+INFO - utils.muon_utils - Muon: 62 2D params; Nesterov-AdamW: 116 other params
+INFO - utils.train_utils - Using Muon optimizer
+INFO - __main__ - Fitting plan-target whitener (zscore) on up to 64 batches...
+greatwall:28637:28637 [0] NCCL INFO Bootstrap : Using bond0:12.19.128.2<0>
+greatwall:28637:28637 [0] NCCL INFO NET/Plugin: No plugin found (libnccl-net.so)
+greatwall:28637:28637 [0] NCCL INFO NET/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-net.so
+greatwall:28637:28637 [0] NCCL INFO NET/Plugin: Using internal network plugin.
+greatwall:28637:28637 [0] NCCL INFO cudaDriverVersion 12040
+NCCL version 2.21.5+cuda12.4
+greatwall:28637:28637 [0] NCCL INFO Comm config Blocking set to 1
+greatwall:28641:28641 [3] NCCL INFO cudaDriverVersion 12040
+greatwall:28642:28642 [4] NCCL INFO cudaDriverVersion 12040
+greatwall:28643:28643 [5] NCCL INFO cudaDriverVersion 12040
+greatwall:28644:28644 [6] NCCL INFO cudaDriverVersion 12040
+greatwall:28639:28639 [1] NCCL INFO cudaDriverVersion 12040
+greatwall:28645:28645 [7] NCCL INFO cudaDriverVersion 12040
+greatwall:28641:28641 [3] NCCL INFO Bootstrap : Using bond0:12.19.128.2<0>
+greatwall:28642:28642 [4] NCCL INFO Bootstrap : Using bond0:12.19.128.2<0>
+greatwall:28641:28641 [3] NCCL INFO NET/Plugin: No plugin found (libnccl-net.so)
+greatwall:28641:28641 [3] NCCL INFO NET/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-net.so
+greatwall:28641:28641 [3] NCCL INFO NET/Plugin: Using internal network plugin.
+greatwall:28642:28642 [4] NCCL INFO NET/Plugin: No plugin found (libnccl-net.so)
+greatwall:28642:28642 [4] NCCL INFO NET/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-net.so
+greatwall:28642:28642 [4] NCCL INFO NET/Plugin: Using internal network plugin.
+greatwall:28641:28641 [3] NCCL INFO Comm config Blocking set to 1
+greatwall:28642:28642 [4] NCCL INFO Comm config Blocking set to 1
+greatwall:28644:28644 [6] NCCL INFO Bootstrap : Using bond0:12.19.128.2<0>
+greatwall:28643:28643 [5] NCCL INFO Bootstrap : Using bond0:12.19.128.2<0>
+greatwall:28639:28639 [1] NCCL INFO Bootstrap : Using bond0:12.19.128.2<0>
+greatwall:28645:28645 [7] NCCL INFO Bootstrap : Using bond0:12.19.128.2<0>
+greatwall:28643:28643 [5] NCCL INFO NET/Plugin: No plugin found (libnccl-net.so)
+greatwall:28643:28643 [5] NCCL INFO NET/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-net.so
+greatwall:28643:28643 [5] NCCL INFO NET/Plugin: Using internal network plugin.
+greatwall:28643:28643 [5] NCCL INFO Comm config Blocking set to 1
+greatwall:28639:28639 [1] NCCL INFO NET/Plugin: No plugin found (libnccl-net.so)
+greatwall:28639:28639 [1] NCCL INFO NET/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-net.so
+greatwall:28639:28639 [1] NCCL INFO NET/Plugin: Using internal network plugin.
+greatwall:28645:28645 [7] NCCL INFO NET/Plugin: No plugin found (libnccl-net.so)
+greatwall:28645:28645 [7] NCCL INFO NET/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-net.so
+greatwall:28645:28645 [7] NCCL INFO NET/Plugin: Using internal network plugin.
+greatwall:28639:28639 [1] NCCL INFO Comm config Blocking set to 1
+greatwall:28644:28644 [6] NCCL INFO NET/Plugin: No plugin found (libnccl-net.so)
+greatwall:28644:28644 [6] NCCL INFO NET/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-net.so
+greatwall:28644:28644 [6] NCCL INFO NET/Plugin: Using internal network plugin.
+greatwall:28645:28645 [7] NCCL INFO Comm config Blocking set to 1
+greatwall:28644:28644 [6] NCCL INFO Comm config Blocking set to 1
+greatwall:28637:29436 [0] NCCL INFO Failed to open libibverbs.so[.1]
+greatwall:28637:29436 [0] NCCL INFO NET/Socket : Using [0]bond0:12.19.128.2<0> [1]br-3205bfa26231:172.19.0.1<0> [2]enxbeb459534d87:fe80::bcb4:59ff:fe53:4d87%enxbeb459534d87<0> [3]vetha8e7699:fe80::7c80:aeff:fe45:9f53%vetha8e7699<0> [4]veth6c49749:fe80::2c13:b2ff:fe0d:fa2c%veth6c49749<0> [5]veth8edf4e2:fe80::540f:b2ff:fe59:bd6e%veth8edf4e2<0> [6]veth44aa812:fe80::2449:fbff:fe27:7174%veth44aa812<0> [7]veth0e77e95:fe80::3c45:acff:fedc:93ca%veth0e77e95<0> [8]vethb25306c:fe80::2479:4bff:fec5:3f8%vethb25306c<0> [9]veth5f0496e:fe80::5489:22ff:fe76:34%veth5f0496e<0> [10]veth09ccaab:fe80::1893:76ff:febd:4339%veth09ccaab<0> [11]veth76e9374:fe80::cc02:25ff:feff:4007%veth76e9374<0> [12]veth806a8c8:fe80::d42c:acff:feec:aad0%veth806a8c8<0> [13]veth5a4f59a:fe80::c8c2:74ff:fe8d:564e%veth5a4f59a<0> [14]veth5d44af0:fe80::306a:66ff:fe69:4989%veth5d44af0<0> [15]vetha6226d0:fe80::6084:37ff:fefb:4ecc%vetha6226d0<0>
+greatwall:28637:29436 [0] NCCL INFO Using non-device net plugin version 0
+greatwall:28637:29436 [0] NCCL INFO Using network Socket
+greatwall:28641:29437 [3] NCCL INFO Failed to open libibverbs.so[.1]
+greatwall:28641:29437 [3] NCCL INFO NET/Socket : Using [0]bond0:12.19.128.2<0> [1]br-3205bfa26231:172.19.0.1<0> [2]enxbeb459534d87:fe80::bcb4:59ff:fe53:4d87%enxbeb459534d87<0> [3]vetha8e7699:fe80::7c80:aeff:fe45:9f53%vetha8e7699<0> [4]veth6c49749:fe80::2c13:b2ff:fe0d:fa2c%veth6c49749<0> [5]veth8edf4e2:fe80::540f:b2ff:fe59:bd6e%veth8edf4e2<0> [6]veth44aa812:fe80::2449:fbff:fe27:7174%veth44aa812<0> [7]veth0e77e95:fe80::3c45:acff:fedc:93ca%veth0e77e95<0> [8]vethb25306c:fe80::2479:4bff:fec5:3f8%vethb25306c<0> [9]veth5f0496e:fe80::5489:22ff:fe76:34%veth5f0496e<0> [10]veth09ccaab:fe80::1893:76ff:febd:4339%veth09ccaab<0> [11]veth76e9374:fe80::cc02:25ff:feff:4007%veth76e9374<0> [12]veth806a8c8:fe80::d42c:acff:feec:aad0%veth806a8c8<0> [13]veth5a4f59a:fe80::c8c2:74ff:fe8d:564e%veth5a4f59a<0> [14]veth5d44af0:fe80::306a:66ff:fe69:4989%veth5d44af0<0> [15]vetha6226d0:fe80::6084:37ff:fefb:4ecc%vetha6226d0<0>
+greatwall:28641:29437 [3] NCCL INFO Using non-device net plugin version 0
+greatwall:28641:29437 [3] NCCL INFO Using network Socket
+greatwall:28642:29438 [4] NCCL INFO Failed to open libibverbs.so[.1]
+greatwall:28639:29440 [1] NCCL INFO Failed to open libibverbs.so[.1]
+greatwall:28645:29441 [7] NCCL INFO Failed to open libibverbs.so[.1]
+greatwall:28644:29442 [6] NCCL INFO Failed to open libibverbs.so[.1]
+greatwall:28642:29438 [4] NCCL INFO NET/Socket : Using [0]bond0:12.19.128.2<0> [1]br-3205bfa26231:172.19.0.1<0> [2]enxbeb459534d87:fe80::bcb4:59ff:fe53:4d87%enxbeb459534d87<0> [3]vetha8e7699:fe80::7c80:aeff:fe45:9f53%vetha8e7699<0> [4]veth6c49749:fe80::2c13:b2ff:fe0d:fa2c%veth6c49749<0> [5]veth8edf4e2:fe80::540f:b2ff:fe59:bd6e%veth8edf4e2<0> [6]veth44aa812:fe80::2449:fbff:fe27:7174%veth44aa812<0> [7]veth0e77e95:fe80::3c45:acff:fedc:93ca%veth0e77e95<0> [8]vethb25306c:fe80::2479:4bff:fec5:3f8%vethb25306c<0> [9]veth5f0496e:fe80::5489:22ff:fe76:34%veth5f0496e<0> [10]veth09ccaab:fe80::1893:76ff:febd:4339%veth09ccaab<0> [11]veth76e9374:fe80::cc02:25ff:feff:4007%veth76e9374<0> [12]veth806a8c8:fe80::d42c:acff:feec:aad0%veth806a8c8<0> [13]veth5a4f59a:fe80::c8c2:74ff:fe8d:564e%veth5a4f59a<0> [14]veth5d44af0:fe80::306a:66ff:fe69:4989%veth5d44af0<0> [15]vetha6226d0:fe80::6084:37ff:fefb:4ecc%vetha6226d0<0>
+greatwall:28642:29438 [4] NCCL INFO Using non-device net plugin version 0
+greatwall:28642:29438 [4] NCCL INFO Using network Socket
+greatwall:28643:29439 [5] NCCL INFO Failed to open libibverbs.so[.1]
+greatwall:28639:29440 [1] NCCL INFO NET/Socket : Using [0]bond0:12.19.128.2<0> [1]br-3205bfa26231:172.19.0.1<0> [2]enxbeb459534d87:fe80::bcb4:59ff:fe53:4d87%enxbeb459534d87<0> [3]vetha8e7699:fe80::7c80:aeff:fe45:9f53%vetha8e7699<0> [4]veth6c49749:fe80::2c13:b2ff:fe0d:fa2c%veth6c49749<0> [5]veth8edf4e2:fe80::540f:b2ff:fe59:bd6e%veth8edf4e2<0> [6]veth44aa812:fe80::2449:fbff:fe27:7174%veth44aa812<0> [7]veth0e77e95:fe80::3c45:acff:fedc:93ca%veth0e77e95<0> [8]vethb25306c:fe80::2479:4bff:fec5:3f8%vethb25306c<0> [9]veth5f0496e:fe80::5489:22ff:fe76:34%veth5f0496e<0> [10]veth09ccaab:fe80::1893:76ff:febd:4339%veth09ccaab<0> [11]veth76e9374:fe80::cc02:25ff:feff:4007%veth76e9374<0> [12]veth806a8c8:fe80::d42c:acff:feec:aad0%veth806a8c8<0> [13]veth5a4f59a:fe80::c8c2:74ff:fe8d:564e%veth5a4f59a<0> [14]veth5d44af0:fe80::306a:66ff:fe69:4989%veth5d44af0<0> [15]vetha6226d0:fe80::6084:37ff:fefb:4ecc%vetha6226d0<0>
+greatwall:28639:29440 [1] NCCL INFO Using non-device net plugin version 0
+greatwall:28639:29440 [1] NCCL INFO Using network Socket
+greatwall:28644:29442 [6] NCCL INFO NET/Socket : Using [0]bond0:12.19.128.2<0> [1]br-3205bfa26231:172.19.0.1<0> [2]enxbeb459534d87:fe80::bcb4:59ff:fe53:4d87%enxbeb459534d87<0> [3]vetha8e7699:fe80::7c80:aeff:fe45:9f53%vetha8e7699<0> [4]veth6c49749:fe80::2c13:b2ff:fe0d:fa2c%veth6c49749<0> [5]veth8edf4e2:fe80::540f:b2ff:fe59:bd6e%veth8edf4e2<0> [6]veth44aa812:fe80::2449:fbff:fe27:7174%veth44aa812<0> [7]veth0e77e95:fe80::3c45:acff:fedc:93ca%veth0e77e95<0> [8]vethb25306c:fe80::2479:4bff:fec5:3f8%vethb25306c<0> [9]veth5f0496e:fe80::5489:22ff:fe76:34%veth5f0496e<0> [10]veth09ccaab:fe80::1893:76ff:febd:4339%veth09ccaab<0> [11]veth76e9374:fe80::cc02:25ff:feff:4007%veth76e9374<0> [12]veth806a8c8:fe80::d42c:acff:feec:aad0%veth806a8c8<0> [13]veth5a4f59a:fe80::c8c2:74ff:fe8d:564e%veth5a4f59a<0> [14]veth5d44af0:fe80::306a:66ff:fe69:4989%veth5d44af0<0> [15]vetha6226d0:fe80::6084:37ff:fefb:4ecc%vetha6226d0<0>
+greatwall:28644:29442 [6] NCCL INFO Using non-device net plugin version 0
+greatwall:28644:29442 [6] NCCL INFO Using network Socket
+greatwall:28645:29441 [7] NCCL INFO NET/Socket : Using [0]bond0:12.19.128.2<0> [1]br-3205bfa26231:172.19.0.1<0> [2]enxbeb459534d87:fe80::bcb4:59ff:fe53:4d87%enxbeb459534d87<0> [3]vetha8e7699:fe80::7c80:aeff:fe45:9f53%vetha8e7699<0> [4]veth6c49749:fe80::2c13:b2ff:fe0d:fa2c%veth6c49749<0> [5]veth8edf4e2:fe80::540f:b2ff:fe59:bd6e%veth8edf4e2<0> [6]veth44aa812:fe80::2449:fbff:fe27:7174%veth44aa812<0> [7]veth0e77e95:fe80::3c45:acff:fedc:93ca%veth0e77e95<0> [8]vethb25306c:fe80::2479:4bff:fec5:3f8%vethb25306c<0> [9]veth5f0496e:fe80::5489:22ff:fe76:34%veth5f0496e<0> [10]veth09ccaab:fe80::1893:76ff:febd:4339%veth09ccaab<0> [11]veth76e9374:fe80::cc02:25ff:feff:4007%veth76e9374<0> [12]veth806a8c8:fe80::d42c:acff:feec:aad0%veth806a8c8<0> [13]veth5a4f59a:fe80::c8c2:74ff:fe8d:564e%veth5a4f59a<0> [14]veth5d44af0:fe80::306a:66ff:fe69:4989%veth5d44af0<0> [15]vetha6226d0:fe80::6084:37ff:fefb:4ecc%vetha6226d0<0>
+greatwall:28645:29441 [7] NCCL INFO Using non-device net plugin version 0
+greatwall:28645:29441 [7] NCCL INFO Using network Socket
+greatwall:28643:29439 [5] NCCL INFO NET/Socket : Using [0]bond0:12.19.128.2<0> [1]br-3205bfa26231:172.19.0.1<0> [2]enxbeb459534d87:fe80::bcb4:59ff:fe53:4d87%enxbeb459534d87<0> [3]vetha8e7699:fe80::7c80:aeff:fe45:9f53%vetha8e7699<0> [4]veth6c49749:fe80::2c13:b2ff:fe0d:fa2c%veth6c49749<0> [5]veth8edf4e2:fe80::540f:b2ff:fe59:bd6e%veth8edf4e2<0> [6]veth44aa812:fe80::2449:fbff:fe27:7174%veth44aa812<0> [7]veth0e77e95:fe80::3c45:acff:fedc:93ca%veth0e77e95<0> [8]vethb25306c:fe80::2479:4bff:fec5:3f8%vethb25306c<0> [9]veth5f0496e:fe80::5489:22ff:fe76:34%veth5f0496e<0> [10]veth09ccaab:fe80::1893:76ff:febd:4339%veth09ccaab<0> [11]veth76e9374:fe80::cc02:25ff:feff:4007%veth76e9374<0> [12]veth806a8c8:fe80::d42c:acff:feec:aad0%veth806a8c8<0> [13]veth5a4f59a:fe80::c8c2:74ff:fe8d:564e%veth5a4f59a<0> [14]veth5d44af0:fe80::306a:66ff:fe69:4989%veth5d44af0<0> [15]vetha6226d0:fe80::6084:37ff:fefb:4ecc%vetha6226d0<0>
+greatwall:28643:29439 [5] NCCL INFO Using non-device net plugin version 0
+greatwall:28643:29439 [5] NCCL INFO Using network Socket
+greatwall:28640:28640 [2] NCCL INFO cudaDriverVersion 12040
+greatwall:28640:28640 [2] NCCL INFO Bootstrap : Using bond0:12.19.128.2<0>
+greatwall:28640:28640 [2] NCCL INFO NET/Plugin: No plugin found (libnccl-net.so)
+greatwall:28640:28640 [2] NCCL INFO NET/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-net.so
+greatwall:28640:28640 [2] NCCL INFO NET/Plugin: Using internal network plugin.
+greatwall:28640:28640 [2] NCCL INFO Comm config Blocking set to 1
+greatwall:28640:29443 [2] NCCL INFO Failed to open libibverbs.so[.1]
+greatwall:28640:29443 [2] NCCL INFO NET/Socket : Using [0]bond0:12.19.128.2<0> [1]br-3205bfa26231:172.19.0.1<0> [2]enxbeb459534d87:fe80::bcb4:59ff:fe53:4d87%enxbeb459534d87<0> [3]vetha8e7699:fe80::7c80:aeff:fe45:9f53%vetha8e7699<0> [4]veth6c49749:fe80::2c13:b2ff:fe0d:fa2c%veth6c49749<0> [5]veth8edf4e2:fe80::540f:b2ff:fe59:bd6e%veth8edf4e2<0> [6]veth44aa812:fe80::2449:fbff:fe27:7174%veth44aa812<0> [7]veth0e77e95:fe80::3c45:acff:fedc:93ca%veth0e77e95<0> [8]vethb25306c:fe80::2479:4bff:fec5:3f8%vethb25306c<0> [9]veth5f0496e:fe80::5489:22ff:fe76:34%veth5f0496e<0> [10]veth09ccaab:fe80::1893:76ff:febd:4339%veth09ccaab<0> [11]veth76e9374:fe80::cc02:25ff:feff:4007%veth76e9374<0> [12]veth806a8c8:fe80::d42c:acff:feec:aad0%veth806a8c8<0> [13]veth5a4f59a:fe80::c8c2:74ff:fe8d:564e%veth5a4f59a<0> [14]veth5d44af0:fe80::306a:66ff:fe69:4989%veth5d44af0<0> [15]vetha6226d0:fe80::6084:37ff:fefb:4ecc%vetha6226d0<0>
+greatwall:28640:29443 [2] NCCL INFO Using non-device net plugin version 0
+greatwall:28640:29443 [2] NCCL INFO Using network Socket
+greatwall:28637:29436 [0] NCCL INFO ncclCommInitRank comm 0x55e838455900 rank 0 nranks 8 cudaDev 0 nvmlDev 0 busId 1000 commId 0xd21899e449a03611 - Init START
+greatwall:28644:29442 [6] NCCL INFO ncclCommInitRank comm 0x56332d27e830 rank 6 nranks 8 cudaDev 6 nvmlDev 6 busId c1000 commId 0xd21899e449a03611 - Init START
+greatwall:28639:29440 [1] NCCL INFO ncclCommInitRank comm 0x55aa21fd44a0 rank 1 nranks 8 cudaDev 1 nvmlDev 1 busId 24000 commId 0xd21899e449a03611 - Init START
+greatwall:28645:29441 [7] NCCL INFO ncclCommInitRank comm 0x560c6632ca00 rank 7 nranks 8 cudaDev 7 nvmlDev 7 busId e1000 commId 0xd21899e449a03611 - Init START
+greatwall:28642:29438 [4] NCCL INFO ncclCommInitRank comm 0x5587cc93c180 rank 4 nranks 8 cudaDev 4 nvmlDev 4 busId 81000 commId 0xd21899e449a03611 - Init START
+greatwall:28640:29443 [2] NCCL INFO ncclCommInitRank comm 0x55caa034d1d0 rank 2 nranks 8 cudaDev 2 nvmlDev 2 busId 41000 commId 0xd21899e449a03611 - Init START
+greatwall:28643:29439 [5] NCCL INFO ncclCommInitRank comm 0x55ab4e337ff0 rank 5 nranks 8 cudaDev 5 nvmlDev 5 busId a1000 commId 0xd21899e449a03611 - Init START
+greatwall:28641:29437 [3] NCCL INFO ncclCommInitRank comm 0x5582ae23ddb0 rank 3 nranks 8 cudaDev 3 nvmlDev 3 busId 61000 commId 0xd21899e449a03611 - Init START
+greatwall:28637:29436 [0] NCCL INFO Setting affinity for GPU 0 to ff000000
+greatwall:28637:29436 [0] NCCL INFO NVLS multicast support is not available on dev 0
+greatwall:28640:29443 [2] NCCL INFO Setting affinity for GPU 2 to ff00
+greatwall:28640:29443 [2] NCCL INFO NVLS multicast support is not available on dev 2
+greatwall:28639:29440 [1] NCCL INFO Setting affinity for GPU 1 to ff0000
+greatwall:28641:29437 [3] NCCL INFO Setting affinity for GPU 3 to ff
+greatwall:28641:29437 [3] NCCL INFO NVLS multicast support is not available on dev 3
+greatwall:28642:29438 [4] NCCL INFO Setting affinity for GPU 4 to ff000000,00000000
+greatwall:28642:29438 [4] NCCL INFO NVLS multicast support is not available on dev 4
+greatwall:28644:29442 [6] NCCL INFO Setting affinity for GPU 6 to ff00,00000000
+greatwall:28639:29440 [1] NCCL INFO NVLS multicast support is not available on dev 1
+greatwall:28644:29442 [6] NCCL INFO NVLS multicast support is not available on dev 6
+greatwall:28645:29441 [7] NCCL INFO Setting affinity for GPU 7 to ff,00000000
+greatwall:28645:29441 [7] NCCL INFO NVLS multicast support is not available on dev 7
+greatwall:28643:29439 [5] NCCL INFO Setting affinity for GPU 5 to ff0000,00000000
+greatwall:28643:29439 [5] NCCL INFO NVLS multicast support is not available on dev 5
+greatwall:28642:29438 [4] NCCL INFO comm 0x5587cc93c180 rank 4 nRanks 8 nNodes 1 localRanks 8 localRank 4 MNNVL 0
+greatwall:28641:29437 [3] NCCL INFO comm 0x5582ae23ddb0 rank 3 nRanks 8 nNodes 1 localRanks 8 localRank 3 MNNVL 0
+greatwall:28640:29443 [2] NCCL INFO comm 0x55caa034d1d0 rank 2 nRanks 8 nNodes 1 localRanks 8 localRank 2 MNNVL 0
+greatwall:28639:29440 [1] NCCL INFO comm 0x55aa21fd44a0 rank 1 nRanks 8 nNodes 1 localRanks 8 localRank 1 MNNVL 0
+greatwall:28645:29441 [7] NCCL INFO comm 0x560c6632ca00 rank 7 nRanks 8 nNodes 1 localRanks 8 localRank 7 MNNVL 0
+greatwall:28637:29436 [0] NCCL INFO comm 0x55e838455900 rank 0 nRanks 8 nNodes 1 localRanks 8 localRank 0 MNNVL 0
+greatwall:28641:29437 [3] NCCL INFO Trees [0] 4/-1/-1->3->2 [1] 4/-1/-1->3->2
+greatwall:28643:29439 [5] NCCL INFO comm 0x55ab4e337ff0 rank 5 nRanks 8 nNodes 1 localRanks 8 localRank 5 MNNVL 0
+greatwall:28641:29437 [3] NCCL INFO P2P Chunksize set to 131072
+greatwall:28644:29442 [6] NCCL INFO comm 0x56332d27e830 rank 6 nRanks 8 nNodes 1 localRanks 8 localRank 6 MNNVL 0
+greatwall:28642:29438 [4] NCCL INFO Trees [0] 5/-1/-1->4->3 [1] 5/-1/-1->4->3
+greatwall:28642:29438 [4] NCCL INFO P2P Chunksize set to 131072
+greatwall:28645:29441 [7] NCCL INFO Trees [0] -1/-1/-1->7->6 [1] -1/-1/-1->7->6
+greatwall:28640:29443 [2] NCCL INFO Trees [0] 3/-1/-1->2->1 [1] 3/-1/-1->2->1
+greatwall:28645:29441 [7] NCCL INFO P2P Chunksize set to 131072
+greatwall:28640:29443 [2] NCCL INFO P2P Chunksize set to 131072
+greatwall:28637:29436 [0] NCCL INFO Channel 00/02 :    0   1   2   3   4   5   6   7
+greatwall:28644:29442 [6] NCCL INFO Trees [0] 7/-1/-1->6->5 [1] 7/-1/-1->6->5
+greatwall:28639:29440 [1] NCCL INFO Trees [0] 2/-1/-1->1->0 [1] 2/-1/-1->1->0
+greatwall:28637:29436 [0] NCCL INFO Channel 01/02 :    0   1   2   3   4   5   6   7
+greatwall:28644:29442 [6] NCCL INFO P2P Chunksize set to 131072
+greatwall:28639:29440 [1] NCCL INFO P2P Chunksize set to 131072
+greatwall:28637:29436 [0] NCCL INFO Trees [0] 1/-1/-1->0->-1 [1] 1/-1/-1->0->-1
+greatwall:28637:29436 [0] NCCL INFO P2P Chunksize set to 131072
+greatwall:28643:29439 [5] NCCL INFO Trees [0] 6/-1/-1->5->4 [1] 6/-1/-1->5->4
+greatwall:28643:29439 [5] NCCL INFO P2P Chunksize set to 131072
+greatwall:28641:29437 [3] NCCL INFO Channel 00 : 3[3] -> 4[4] via SHM/direct/direct
+greatwall:28642:29438 [4] NCCL INFO Channel 00 : 4[4] -> 5[5] via SHM/direct/direct
+greatwall:28637:29436 [0] NCCL INFO Channel 00 : 0[0] -> 1[1] via SHM/direct/direct
+greatwall:28640:29443 [2] NCCL INFO Channel 00 : 2[2] -> 3[3] via SHM/direct/direct
+greatwall:28643:29439 [5] NCCL INFO Channel 00 : 5[5] -> 6[6] via SHM/direct/direct
+greatwall:28645:29441 [7] NCCL INFO Channel 00 : 7[7] -> 0[0] via SHM/direct/direct
+greatwall:28639:29440 [1] NCCL INFO Channel 00 : 1[1] -> 2[2] via SHM/direct/direct
+greatwall:28644:29442 [6] NCCL INFO Channel 00 : 6[6] -> 7[7] via SHM/direct/direct
+greatwall:28641:29437 [3] NCCL INFO Channel 01 : 3[3] -> 4[4] via SHM/direct/direct
+greatwall:28642:29438 [4] NCCL INFO Channel 01 : 4[4] -> 5[5] via SHM/direct/direct
+greatwall:28637:29436 [0] NCCL INFO Channel 01 : 0[0] -> 1[1] via SHM/direct/direct
+greatwall:28640:29443 [2] NCCL INFO Channel 01 : 2[2] -> 3[3] via SHM/direct/direct
+greatwall:28643:29439 [5] NCCL INFO Channel 01 : 5[5] -> 6[6] via SHM/direct/direct
+greatwall:28645:29441 [7] NCCL INFO Channel 01 : 7[7] -> 0[0] via SHM/direct/direct
+greatwall:28639:29440 [1] NCCL INFO Channel 01 : 1[1] -> 2[2] via SHM/direct/direct
+greatwall:28644:29442 [6] NCCL INFO Channel 01 : 6[6] -> 7[7] via SHM/direct/direct
+greatwall:28641:29437 [3] NCCL INFO Connected all rings
+greatwall:28640:29443 [2] NCCL INFO Connected all rings
+greatwall:28637:29436 [0] NCCL INFO Connected all rings
+greatwall:28639:29440 [1] NCCL INFO Connected all rings
+greatwall:28645:29441 [7] NCCL INFO Connected all rings
+greatwall:28645:29441 [7] NCCL INFO Channel 00 : 7[7] -> 6[6] via SHM/direct/direct
+greatwall:28644:29442 [6] NCCL INFO Connected all rings
+greatwall:28642:29438 [4] NCCL INFO Connected all rings
+greatwall:28643:29439 [5] NCCL INFO Connected all rings
+greatwall:28645:29441 [7] NCCL INFO Channel 01 : 7[7] -> 6[6] via SHM/direct/direct
+greatwall:28641:29437 [3] NCCL INFO Channel 00 : 3[3] -> 2[2] via SHM/direct/direct
+greatwall:28640:29443 [2] NCCL INFO Channel 00 : 2[2] -> 1[1] via SHM/direct/direct
+greatwall:28639:29440 [1] NCCL INFO Channel 00 : 1[1] -> 0[0] via SHM/direct/direct
+greatwall:28644:29442 [6] NCCL INFO Channel 00 : 6[6] -> 5[5] via SHM/direct/direct
+greatwall:28642:29438 [4] NCCL INFO Channel 00 : 4[4] -> 3[3] via SHM/direct/direct
+greatwall:28643:29439 [5] NCCL INFO Channel 00 : 5[5] -> 4[4] via SHM/direct/direct
+greatwall:28641:29437 [3] NCCL INFO Channel 01 : 3[3] -> 2[2] via SHM/direct/direct
+greatwall:28640:29443 [2] NCCL INFO Channel 01 : 2[2] -> 1[1] via SHM/direct/direct
+greatwall:28639:29440 [1] NCCL INFO Channel 01 : 1[1] -> 0[0] via SHM/direct/direct
+greatwall:28644:29442 [6] NCCL INFO Channel 01 : 6[6] -> 5[5] via SHM/direct/direct
+greatwall:28642:29438 [4] NCCL INFO Channel 01 : 4[4] -> 3[3] via SHM/direct/direct
+greatwall:28643:29439 [5] NCCL INFO Channel 01 : 5[5] -> 4[4] via SHM/direct/direct
+greatwall:28637:29436 [0] NCCL INFO Connected all trees
+greatwall:28645:29441 [7] NCCL INFO Connected all trees
+greatwall:28641:29437 [3] NCCL INFO Connected all trees
+greatwall:28645:29441 [7] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+greatwall:28637:29436 [0] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+greatwall:28641:29437 [3] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+greatwall:28645:29441 [7] NCCL INFO 2 coll channels, 2 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+greatwall:28637:29436 [0] NCCL INFO 2 coll channels, 2 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+greatwall:28641:29437 [3] NCCL INFO 2 coll channels, 2 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+greatwall:28644:29442 [6] NCCL INFO Connected all trees
+greatwall:28644:29442 [6] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+greatwall:28644:29442 [6] NCCL INFO 2 coll channels, 2 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+greatwall:28640:29443 [2] NCCL INFO Connected all trees
+greatwall:28639:29440 [1] NCCL INFO Connected all trees
+greatwall:28640:29443 [2] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+greatwall:28640:29443 [2] NCCL INFO 2 coll channels, 2 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+greatwall:28639:29440 [1] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+greatwall:28639:29440 [1] NCCL INFO 2 coll channels, 2 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+greatwall:28643:29439 [5] NCCL INFO Connected all trees
+greatwall:28643:29439 [5] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+greatwall:28643:29439 [5] NCCL INFO 2 coll channels, 2 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+greatwall:28642:29438 [4] NCCL INFO Connected all trees
+greatwall:28642:29438 [4] NCCL INFO threadThresholds 8/8/64 | 64/8/64 | 512 | 512
+greatwall:28642:29438 [4] NCCL INFO 2 coll channels, 2 collnet channels, 0 nvls channels, 2 p2p channels, 2 p2p channels per peer
+greatwall:28640:29443 [2] NCCL INFO TUNER/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-tuner.so
+greatwall:28640:29443 [2] NCCL INFO TUNER/Plugin: Using internal tuner plugin.
+greatwall:28640:29443 [2] NCCL INFO ncclCommInitRank comm 0x55caa034d1d0 rank 2 nranks 8 cudaDev 2 nvmlDev 2 busId 41000 commId 0xd21899e449a03611 - Init COMPLETE
+greatwall:28637:29436 [0] NCCL INFO TUNER/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-tuner.so
+greatwall:28639:29440 [1] NCCL INFO TUNER/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-tuner.so
+greatwall:28641:29437 [3] NCCL INFO TUNER/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-tuner.so
+greatwall:28637:29436 [0] NCCL INFO TUNER/Plugin: Using internal tuner plugin.
+greatwall:28639:29440 [1] NCCL INFO TUNER/Plugin: Using internal tuner plugin.
+greatwall:28641:29437 [3] NCCL INFO TUNER/Plugin: Using internal tuner plugin.
+greatwall:28637:29436 [0] NCCL INFO ncclCommInitRank comm 0x55e838455900 rank 0 nranks 8 cudaDev 0 nvmlDev 0 busId 1000 commId 0xd21899e449a03611 - Init COMPLETE
+greatwall:28639:29440 [1] NCCL INFO ncclCommInitRank comm 0x55aa21fd44a0 rank 1 nranks 8 cudaDev 1 nvmlDev 1 busId 24000 commId 0xd21899e449a03611 - Init COMPLETE
+greatwall:28641:29437 [3] NCCL INFO ncclCommInitRank comm 0x5582ae23ddb0 rank 3 nranks 8 cudaDev 3 nvmlDev 3 busId 61000 commId 0xd21899e449a03611 - Init COMPLETE
+greatwall:28642:29438 [4] NCCL INFO TUNER/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-tuner.so
+greatwall:28644:29442 [6] NCCL INFO TUNER/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-tuner.so
+greatwall:28642:29438 [4] NCCL INFO TUNER/Plugin: Using internal tuner plugin.
+greatwall:28644:29442 [6] NCCL INFO TUNER/Plugin: Using internal tuner plugin.
+greatwall:28642:29438 [4] NCCL INFO ncclCommInitRank comm 0x5587cc93c180 rank 4 nranks 8 cudaDev 4 nvmlDev 4 busId 81000 commId 0xd21899e449a03611 - Init COMPLETE
+greatwall:28645:29441 [7] NCCL INFO TUNER/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-tuner.so
+greatwall:28644:29442 [6] NCCL INFO ncclCommInitRank comm 0x56332d27e830 rank 6 nranks 8 cudaDev 6 nvmlDev 6 busId c1000 commId 0xd21899e449a03611 - Init COMPLETE
+greatwall:28645:29441 [7] NCCL INFO TUNER/Plugin: Using internal tuner plugin.
+greatwall:28645:29441 [7] NCCL INFO ncclCommInitRank comm 0x560c6632ca00 rank 7 nranks 8 cudaDev 7 nvmlDev 7 busId e1000 commId 0xd21899e449a03611 - Init COMPLETE
+greatwall:28643:29439 [5] NCCL INFO TUNER/Plugin: Plugin load returned 2 : libnccl-net.so: cannot open shared object file: No such file or directory : when loading libnccl-tuner.so
+greatwall:28643:29439 [5] NCCL INFO TUNER/Plugin: Using internal tuner plugin.
+greatwall:28643:29439 [5] NCCL INFO ncclCommInitRank comm 0x55ab4e337ff0 rank 5 nranks 8 cudaDev 5 nvmlDev 5 busId a1000 commId 0xd21899e449a03611 - Init COMPLETE
+INFO - __main__ - Plan whitener (zscore): 62787 slots, raw pooled std ~ 0.255
+INFO - __main__ - Config saved to outputs/elf_b-owt-ordered/config.yml
+INFO - __main__ - 
+============================================================
+INFO - __main__ - Checkpoint and Evaluation Schedule
+INFO - __main__ - ============================================================
+INFO - __main__ - Steps/epoch=152143, epochs=5, total=760715 | save every 1 epoch(s), eval every 1 epoch(s)
+INFO - __main__ - Sampling configs: 4 config(s)
+INFO - __main__ - 
+============================================================
+INFO - __main__ - Starting Training
+INFO - __main__ - ============================================================
+INFO - __main__ - 
+Epoch 1/5
+Epoch 1:   0%|          | 0/152143 [00:00<?, ?it/s]INFO - __main__ - Performing initial training step, this may take longer...
+INFO - __main__ - First training step (torch.compile + execution) completed...
+Epoch 1:   0%|          | 1/152143 [00:01<55:10:43,  1.31s/it]Epoch 1:   0%|          | 4/152143 [00:02<22:32:48,  1.87it/s]Epoch 1:   0%|          | 6/152143 [00:03<24:34:48,  1.72it/s]Epoch 1:   0%|          | 8/152143 [00:04<25:32:52,  1.65it/s]Epoch 1:   0%|          | 11/152143 [00:05<20:39:38,  2.05it/s]Epoch 1:   0%|          | 14/152143 [00:07<21:53:37,  1.93it/s]Epoch 1:   0%|          | 17/152143 [00:09<25:46:12,  1.64it/s]Epoch 1:   0%|          | 19/152143 [00:11<26:05:12,  1.62it/s]Epoch 1:   0%|          | 21/152143 [00:12<26:17:40,  1.61it/s]Epoch 1:   0%|          | 23/152143 [00:14<30:42:33,  1.38it/s]Epoch 1:   0%|          | 25/152143 [00:16<30:46:53,  1.37it/s]Epoch 1:   0%|          | 27/152143 [00:17<29:38:53,  1.43it/s]Epoch 1:   0%|          | 29/152143 [00:18<28:58:05,  1.46it/s]Epoch 1:   0%|          | 31/152143 [00:20<31:56:39,  1.32it/s]Epoch 1:   0%|          | 33/152143 [00:21<31:37:15,  1.34it/s]Epoch 1:   0%|          | 35/152143 [00:23<32:45:53,  1.29it/s]Epoch 1:   0%|          | 38/152143 [00:24<26:56:19,  1.57it/s]Epoch 1:   0%|          | 40/152143 [00:26<26:42:04,  1.58it/s]Epoch 1:   0%|          | 43/152143 [00:27<22:19:05,  1.89it/s]Epoch 1:   0%|          | 46/152143 [00:28<20:45:05,  2.04it/s]Epoch 1:   0%|          | 49/152143 [00:29<20:36:07,  2.05it/s]Epoch 1:   0%|          | 52/152143 [00:31<19:40:53,  2.15it/s]Epoch 1:   0%|          | 55/152143 [00:32<20:19:32,  2.08it/s]Epoch 1:   0%|          | 58/152143 [00:34<20:30:04,  2.06it/s]Epoch 1:   0%|          | 61/152143 [00:35<19:48:40,  2.13it/s]Epoch 1:   0%|          | 64/152143 [00:37<21:02:33,  2.01it/s]Epoch 1:   0%|          | 67/152143 [00:38<19:22:31,  2.18it/s]Epoch 1:   0%|          | 70/152143 [00:39<20:45:01,  2.04it/s]Epoch 1:   0%|          | 73/152143 [00:41<22:32:52,  1.87it/s]Epoch 1:   0%|          | 75/152143 [00:43<24:25:15,  1.73it/s]Epoch 1:   0%|          | 77/152143 [00:44<26:23:34,  1.60it/s]Epoch 1:   0%|          | 79/152143 [00:46<28:49:53,  1.47it/s]Epoch 1:   0%|          | 81/152143 [00:47<28:36:40,  1.48it/s]Epoch 1:   0%|          | 83/152143 [00:49<29:54:56,  1.41it/s]Epoch 1:   0%|          | 85/152143 [00:51<33:26:20,  1.26it/s]Epoch 1:   0%|          | 87/152143 [00:53<34:13:23,  1.23it/s]Epoch 1:   0%|          | 89/152143 [00:55<37:46:41,  1.12it/s]Epoch 1:   0%|          | 91/152143 [00:56<33:41:25,  1.25it/s]Epoch 1:   0%|          | 94/152143 [00:57<27:32:15,  1.53it/s]Epoch 1:   0%|          | 96/152143 [00:58<27:15:22,  1.55it/s]Epoch 1:   0%|          | 99/152143 [01:00<22:45:26,  1.86it/s]INFO - __main__ - {'step': '100', 'loss': '1.8069', 'l2': '0.7055', 'ce': '1.0275', 'plan': '1.0020', 'sps': '1.6', 'lr': '2.52e-06'}
+Epoch 1:   0%|          | 100/152143 [01:00<22:45:26,  1.86it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]                                                                                                                                                INFO - engine - Step 100: loss=1.8069, l2=0.7055, ce=1.0275, plan=1.0020, lr=2.52e-06, steps/sec=1.63
+Epoch 1:   0%|          | 100/152143 [01:00<22:45:26,  1.86it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 102/152143 [01:01<21:17:02,  1.98it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 105/152143 [01:02<20:56:01,  2.02it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 108/152143 [01:04<20:09:58,  2.09it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 111/152143 [01:05<21:54:49,  1.93it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 113/152143 [01:06<21:56:31,  1.92it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 115/152143 [01:08<23:22:35,  1.81it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 118/152143 [01:09<21:25:33,  1.97it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 120/152143 [01:11<25:41:36,  1.64it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 123/152143 [01:12<22:03:24,  1.91it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 126/152143 [01:14<23:31:13,  1.80it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 128/152143 [01:15<24:16:30,  1.74it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 131/152143 [01:17<23:20:36,  1.81it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 134/152143 [01:18<21:34:28,  1.96it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 137/152143 [01:19<21:16:46,  1.98it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 140/152143 [01:21<20:25:12,  2.07it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 143/152143 [01:22<19:38:48,  2.15it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 146/152143 [01:24<24:33:30,  1.72it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]Epoch 1:   0%|          | 148/152143 [01:26<25:49:08,  1.64it/s, ce=1.0275, l2=0.7055, loss=1.8069, lr=2.52e-06, plan=1.0020, sps=1.6, step=100]
