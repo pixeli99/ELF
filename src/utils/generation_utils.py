@@ -66,6 +66,8 @@ def _generate_samples_single_batch(
     self_cond_cfg_scale: float,
     record_plan: bool = False,
     plan_override: Optional[list] = None,
+    plan_override_t: Optional[float] = None,
+    freeze_plan_override: bool = False,
 ) -> torch.Tensor:
     """Generate samples for a single batch (PyTorch Euler / SDE rollout).
 
@@ -73,6 +75,8 @@ def _generate_samples_single_batch(
     per step plus the final decode plan (n entries for an n-point t_steps grid).
     plan_override: a list with the same layout that REPLACES the plan fed at each step
     (plan grafting / shuffle probes); the plan's own Euler updates are then discarded.
+    plan_override_t: optional fixed clock for overridden plans. Oracle-plan eval uses 1.0.
+    freeze_plan_override: when True, re-apply the overridden plan after every sampler update.
     """
     method = sampling_config.sampling_method
     batch_size, max_length, d_model = z.shape
@@ -125,15 +129,20 @@ def _generate_samples_single_batch(
     )
 
     def _tp(i):
+        if plan_on and plan_override is not None and plan_override_t is not None:
+            return float(plan_override_t)
         return t_plan_steps[i].item() if plan_on else None
 
     plan_traj = [] if record_plan else None
 
-    def _pre_step(i):
-        """Override / record the plan latent fed at step i."""
+    def _override_at(i):
         nonlocal z_plan
         if plan_on and plan_override is not None:
             z_plan = plan_override[i].to(device=z.device, dtype=z.dtype)
+
+    def _pre_step(i):
+        """Override / record the plan latent fed at step i."""
+        _override_at(i)
         if plan_on and record_plan:
             plan_traj.append(z_plan.detach().clone())
 
@@ -149,11 +158,15 @@ def _generate_samples_single_batch(
                     gamma=sde_gamma, generator=generator,
                     z_plan=z_plan, t_plan=_tp(i), t_plan_next=_tp(i + 1), **step_kwargs,
                 )
+                if freeze_plan_override:
+                    _override_at(i)
             elif method == "ode":
                 z, x_pred, z_plan = _ode_step(
                     z=z, t=t, t_next=t_next, x_pred_prev=x_pred,
                     z_plan=z_plan, t_plan=_tp(i), t_plan_next=_tp(i + 1), **step_kwargs,
                 )
+                if freeze_plan_override:
+                    _override_at(i)
             else:
                 raise ValueError(f"Invalid sampling method: {method}")
 
@@ -165,6 +178,8 @@ def _generate_samples_single_batch(
             z=z, t=t, t_next=t_next, x_pred_prev=x_pred,
             z_plan=z_plan, t_plan=_tp(n - 2), t_plan_next=_tp(n - 1), **step_kwargs,
         )
+        if freeze_plan_override:
+            _override_at(n - 2)
     # The final decode plan (fed to _dlm_decode_batch at t_plan = 1).
     if plan_on and plan_override is not None:
         z_plan = plan_override[n - 1].to(device=z.device, dtype=z.dtype)

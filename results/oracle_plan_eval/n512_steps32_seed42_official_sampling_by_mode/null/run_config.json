@@ -1,0 +1,25 @@
+{
+  "config_path": "src/configs/training_configs/train_owt_ELF-B_ordered.yml",
+  "checkpoint_path": "outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592",
+  "dataset": "embedded-language-flows/openwebtext-t5",
+  "num_samples": 512,
+  "num_sampling_steps": 32,
+  "modes": [
+    "null"
+  ],
+  "seed": 42,
+  "paired_eval_base_seed": 42,
+  "global_batch_size": 4,
+  "eval_ppl_batch_size": 4,
+  "out_dir": "results/oracle_plan_eval/n512_steps32_seed42_official_sampling_by_mode/null",
+  "sampling_config_path": "src/configs/sampling_configs/ordered_sampling_configs.yml",
+  "eval_ppl_model": null,
+  "eval_ppl_max_length": null,
+  "dataset_cache_dir": null,
+  "use_cpu": false,
+  "resolved_checkpoint_path": "outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592",
+  "config": "src/configs/training_configs/train_owt_ELF-B_ordered.yml",
+  "plan_shape": null,
+  "shuffle_permutation_first16": [],
+  "sequence_length_first16": []
+}

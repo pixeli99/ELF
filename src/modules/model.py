@@ -210,17 +210,8 @@ class ELF(nn.Module):
         The whitening stats are dataset constants (buffers); the plan is never un-whitened —
         it only ever conditions the model, so its latent space is free to be standardized.
         """
-        from utils.sampling_utils import frozen_pool_plan_target
-        pooled = frozen_pool_plan_target(x0, valid_mask, self.num_plan_slots)
-        if self.plan_whiten == "none":
-            return pooled
-        if self.plan_whiten == "pca":
-            if int(self.plan_whiten_ready.item()) == 0:
-                raise RuntimeError("plan_whiten='pca' used before fitting the whitener "
-                                   "(run the pre-training stats pass)")
-            return (pooled - self.plan_target_mean) @ self.plan_target_proj
-        # "zscore": identity until fitted (mean 0 / std 1), i.e. the raw pooled target.
-        return (pooled - self.plan_target_mean) / self.plan_target_std
+        from utils.plan_utils import build_plan_target
+        return build_plan_target(self, x0, valid_mask)
 
     def build_context(self, t: torch.Tensor,
                       t_plan: Optional[torch.Tensor] = None,

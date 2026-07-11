@@ -1,0 +1,46 @@
+{
+  "modes": [
+    {
+      "mode": "null",
+      "num_samples": 512,
+      "num_nonempty_samples": 512,
+      "num_sampling_steps": 32,
+      "gen_ppl": 29.490366131047434,
+      "entropy": 5.221289504319429,
+      "consistency": null,
+      "sampling_method": "sde",
+      "sde_gamma": 1.5,
+      "time_schedule": "logit_normal",
+      "cfg_scale": 1,
+      "self_cond_cfg_scale": 3,
+      "plan_trajectory": "null",
+      "plan_lead_alpha": 2.0,
+      "denoiser_noise_scale": 2.0,
+      "max_length": 1024,
+      "eval_ppl_model": "gpt2-large",
+      "eval_ppl_max_length": 1024,
+      "eval_ppl_batch_size": 4
+    }
+  ],
+  "best_by_gen_ppl": {
+    "mode": "null",
+    "num_samples": 512,
+    "num_nonempty_samples": 512,
+    "num_sampling_steps": 32,
+    "gen_ppl": 29.490366131047434,
+    "entropy": 5.221289504319429,
+    "consistency": null,
+    "sampling_method": "sde",
+    "sde_gamma": 1.5,
+    "time_schedule": "logit_normal",
+    "cfg_scale": 1,
+    "self_cond_cfg_scale": 3,
+    "plan_trajectory": "null",
+    "plan_lead_alpha": 2.0,
+    "denoiser_noise_scale": 2.0,
+    "max_length": 1024,
+    "eval_ppl_model": "gpt2-large",
+    "eval_ppl_max_length": 1024,
+    "eval_ppl_batch_size": 4
+  }
+}
