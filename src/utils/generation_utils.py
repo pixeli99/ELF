@@ -193,11 +193,12 @@ def _generate_samples_single_batch(
 
 
 @torch.no_grad()
-def _dlm_decode_batch(z: torch.Tensor, model: nn.Module, t_final_val,
-                      config, self_cond_cfg_scale: float, x_plan=None,
-                      t_plan_decode_val: Optional[float] = None,
-                      plan_trajectory: Optional[str] = None) -> torch.Tensor:
-    """Decode z -> tokens with the DLM decoder head.
+def _dlm_decode_logits_batch(z: torch.Tensor, model: nn.Module, t_final_val,
+                             config, self_cond_cfg_scale: float, x_plan=None,
+                             t_plan_decode_val: Optional[float] = None,
+                             plan_trajectory: Optional[str] = None,
+                             attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    """Return response logits through the normal fixed-width DLM decoder path.
 
     Normal ordered trajectories (diagonal / planning_first / lagging) decode with
     t_plan=1 so the decoder sees a finished clean-plan condition. The strict null
@@ -206,6 +207,13 @@ def _dlm_decode_batch(z: torch.Tensor, model: nn.Module, t_final_val,
     the (t_tok=1, t_plan=1) endpoint. None for a vanilla model.
     """
     batch_size = z.shape[0]
+    if attention_mask is not None:
+        if tuple(attention_mask.shape) != tuple(z.shape[:2]):
+            raise ValueError("attention_mask must have shape [B, response_width]")
+        if attention_mask.dtype != torch.bool:
+            if not bool(((attention_mask == 0) | (attention_mask == 1)).all()):
+                raise ValueError("attention_mask must be bool or contain only 0/1")
+            attention_mask = attention_mask.bool()
     if isinstance(t_final_val, torch.Tensor) and t_final_val.dim() == 0:
         t_final = torch.full((batch_size,), t_final_val.item(), dtype=z.dtype, device=z.device)
     else:
@@ -225,11 +233,28 @@ def _dlm_decode_batch(z: torch.Tensor, model: nn.Module, t_final_val,
     with torch.amp.autocast('cuda', dtype=torch.bfloat16, enabled=use_bf16):
         _, decoder_logits, _ = model(
             z_input, t_final, deterministic=True,
+            attention_mask=attention_mask,
             self_cond_cfg_scale=sc_batch,
             decoder_step_active=True,
             x_plan=x_plan, t_plan=t_plan,
         )
-    return decoder_logits.argmax(dim=-1)
+    return decoder_logits
+
+
+@torch.no_grad()
+def _dlm_decode_batch(z: torch.Tensor, model: nn.Module, t_final_val,
+                      config, self_cond_cfg_scale: float, x_plan=None,
+                      t_plan_decode_val: Optional[float] = None,
+                      plan_trajectory: Optional[str] = None,
+                      attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    """Decode z -> token IDs; default behavior remains unchanged."""
+    logits = _dlm_decode_logits_batch(
+        z=z, model=model, t_final_val=t_final_val, config=config,
+        self_cond_cfg_scale=self_cond_cfg_scale, x_plan=x_plan,
+        t_plan_decode_val=t_plan_decode_val, plan_trajectory=plan_trajectory,
+        attention_mask=attention_mask,
+    )
+    return logits.argmax(dim=-1)
 
 
 def _build_run_name(sampling_method, num_sampling_steps, cfg_scale, self_cond_cfg_scale,

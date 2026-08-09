@@ -196,3 +196,59 @@ def canonical_t5_x0(encoder, input_ids, attention_mask, latent_mean, latent_std,
             latent_std=latent_std,
         )
         return normalized.float()
+def resolve_decoder_response_width(model, config) -> int:
+    """Resolve and cross-check the fixed response width used by an ELF checkpoint."""
+    model_width = getattr(model, "max_length", None)
+    config_width = getattr(config, "max_length", None)
+    if model_width is None or config_width is None:
+        raise ValueError("model and config must both declare max_length")
+    if int(model_width) != int(config_width):
+        raise ValueError(
+            f"decoder response width mismatch: model={model_width}, config={config_width}"
+        )
+    return int(model_width)
+
+
+def restore_grouped_token_layout(grouped, reconstruction_mask, valid_mask):
+    """Remove only structural tail-group padding and restore original token width."""
+    if grouped.ndim != 4 or reconstruction_mask.shape != grouped.shape[:-1]:
+        raise ValueError("grouped latent and reconstruction_mask shapes disagree")
+    if valid_mask.ndim != 2 or valid_mask.shape[0] != grouped.shape[0]:
+        raise ValueError("valid_mask must have shape [B,L]")
+    flat = grouped.flatten(1, 2)
+    flat_group_mask = reconstruction_mask.flatten(1, 2).bool()
+    token_width = valid_mask.shape[1]
+    if flat.shape[1] < token_width:
+        raise ValueError("grouped latent is shorter than the original token layout")
+    if not torch.equal(flat_group_mask[:, :token_width], valid_mask.bool()):
+        raise ValueError("group reconstruction mask does not match original token mask")
+    if bool(flat_group_mask[:, token_width:].any()):
+        raise ValueError("tail group padding is incorrectly marked valid")
+    restored = flat[:, :token_width]
+    return restored * valid_mask.bool().unsqueeze(-1).to(restored.dtype)
+
+
+def adapt_to_fixed_decoder_width(latent, input_ids, valid_mask, decoder_response_width,
+                                 pad_token_id):
+    """Right-pad response-only tensors to the checkpoint's fixed decoder width."""
+    if latent.ndim != 3 or input_ids.ndim != 2 or valid_mask.ndim != 2:
+        raise ValueError("expected latent [B,L,C], input_ids/mask [B,L]")
+    if latent.shape[:2] != input_ids.shape or input_ids.shape != valid_mask.shape:
+        raise ValueError("latent, input_ids, and valid_mask batch/sequence shapes disagree")
+    mask = valid_mask.bool()
+    lengths = mask.sum(1)
+    positions = torch.arange(mask.shape[1], device=mask.device).unsqueeze(0)
+    if not torch.equal(mask, positions < lengths.unsqueeze(1)):
+        raise ValueError("valid_mask must describe right-padded token sequences")
+    if bool((lengths > decoder_response_width).any()) or latent.shape[1] > decoder_response_width:
+        raise ValueError(
+            f"response length exceeds decoder width {decoder_response_width}: "
+            f"maximum_valid={int(lengths.max())}, tensor_width={latent.shape[1]}"
+        )
+    pad = decoder_response_width - latent.shape[1]
+    padded_latent = F.pad(latent * mask.unsqueeze(-1).to(latent.dtype), (0, 0, 0, pad))
+    padded_ids = F.pad(input_ids, (0, pad), value=int(pad_token_id))
+    padded_mask = F.pad(mask, (0, pad), value=False)
+    if not torch.equal(padded_mask.sum(1), lengths):
+        raise AssertionError("fixed-width adaptation changed valid token counts")
+    return padded_latent, padded_ids, padded_mask
