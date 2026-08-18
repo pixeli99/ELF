@@ -70,7 +70,10 @@ def get_optimizer(model: nn.Module, config, lr: float, grad_accum_steps: int = 1
     """Build optimizer (AdamW or Muon). Gradient clipping is applied in train.py."""
     if config.optimizer == "muon":
         from utils.muon_utils import muon_with_aux_adam
-        opt = muon_with_aux_adam(model, lr=lr)
+        opt = muon_with_aux_adam(
+            model, lr=lr,
+            replicated_across_ranks=bool(getattr(config, "ddp_replicated_optimizer", False)),
+        )
         log_for_0("Using Muon optimizer")
     elif config.optimizer == "adamw":
         params = [p for p in model.parameters() if p.requires_grad]

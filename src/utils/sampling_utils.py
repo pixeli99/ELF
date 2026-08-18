@@ -170,7 +170,8 @@ def _plan_velocity(net_out, z_plan, t_plan_batch, t_eps):
 def _forward_sample_self_cond(
     model, z, t_batch, x_pred_prev, config,
     self_cond_cfg_scale, cond_seq, cond_seq_mask,
-    x_plan=None, t_plan_batch=None,
+    x_plan=None, t_plan_batch=None, plan_mask=None, nfe_counter=None,
+    response_attention_mask=None,
 ):
     """Forward pass with self-conditioning. Returns (v, x, v_plan).
 
@@ -180,7 +181,14 @@ def _forward_sample_self_cond(
     """
     t_eps = config.t_eps
     self_cond_prob = config.self_cond_prob
-    pk = dict(x_plan=x_plan, t_plan=t_plan_batch)
+    pk = dict(x_plan=x_plan, t_plan=t_plan_batch, plan_mask=plan_mask)
+    if response_attention_mask is not None:
+        pk["attention_mask"] = response_attention_mask
+
+    def call_model(*args, **kwargs):
+        if nfe_counter is not None:
+            nfe_counter["model_forwards"] = nfe_counter.get("model_forwards", 0) + 1
+        return model(*args, **kwargs)
 
     def _restore(v, x):
         return restore_vx(v, x, cond_seq=cond_seq, cond_seq_mask=cond_seq_mask)
@@ -191,8 +199,8 @@ def _forward_sample_self_cond(
         z_input_cond = torch.cat([z, x_pred_prev], dim=-1)
         self_cond_scale_batch = torch.full((z.shape[0],), float(self_cond_cfg_scale),
                                            dtype=z.dtype, device=z.device)
-        net_out_cond = model(z_input_cond, t_batch, deterministic=True,
-                             self_cond_cfg_scale=self_cond_scale_batch, **pk)
+        net_out_cond = call_model(z_input_cond, t_batch, deterministic=True,
+                                  self_cond_cfg_scale=self_cond_scale_batch, **pk)
         v_cond, x_cond = net_out_to_v_x(net_out_cond, z, t_batch, t_eps)
         v_plan = _plan_velocity(net_out_cond, x_plan, t_plan_batch, t_eps)
         v_cond, x_cond = _restore(v_cond, x_cond)
@@ -200,7 +208,7 @@ def _forward_sample_self_cond(
 
     # No self-conditioning
     if self_cond_prob == 0:
-        net_out = model(z, t_batch, deterministic=True, **pk)
+        net_out = call_model(z, t_batch, deterministic=True, **pk)
         v, x = net_out_to_v_x(net_out, z, t_batch, t_eps)
         v_plan = _plan_velocity(net_out, x_plan, t_plan_batch, t_eps)
         v, x = _restore(v, x)
@@ -211,7 +219,7 @@ def _forward_sample_self_cond(
     if self_cond_cfg_scale != 1 or x_pred_prev is None:
         z_uncond = restore_cond(torch.zeros_like(z), cond_seq, cond_seq_mask)
         z_input_uncond = torch.cat([z, z_uncond], dim=-1)
-        net_out_uncond = model(z_input_uncond, t_batch, deterministic=True, **pk)
+        net_out_uncond = call_model(z_input_uncond, t_batch, deterministic=True, **pk)
         v_uncond, x_uncond = net_out_to_v_x(net_out_uncond, z, t_batch, t_eps)
         v_plan = _plan_velocity(net_out_uncond, x_plan, t_plan_batch, t_eps)
         v_uncond, x_uncond = _restore(v_uncond, x_uncond)
@@ -219,7 +227,7 @@ def _forward_sample_self_cond(
             return v_uncond, x_uncond, v_plan
 
     z_input_cond = torch.cat([z, x_pred_prev], dim=-1)
-    net_out_cond = model(z_input_cond, t_batch, deterministic=True, **pk)
+    net_out_cond = call_model(z_input_cond, t_batch, deterministic=True, **pk)
     v_cond, x_cond = net_out_to_v_x(net_out_cond, z, t_batch, t_eps)
     v_plan = _plan_velocity(net_out_cond, x_plan, t_plan_batch, t_eps)
     v_cond, x_cond = _restore(v_cond, x_cond)
@@ -235,8 +243,9 @@ def _forward_sample_self_cond(
 def _forward_sample(
     model, z, t_batch, x_pred_prev, config,
     cfg_scale, self_cond_cfg_scale, cond_seq, cond_seq_mask,
-    x_plan=None, t_plan_batch=None,
-    x_plan_null=None, plan_cfg_scale=1.0,
+    x_plan=None, t_plan_batch=None, plan_mask=None,
+    x_plan_null=None, plan_cfg_scale=1.0, nfe_counter=None,
+    response_attention_mask=None,
 ):
     """Forward pass with optional self-conditioning and CFG. Returns (v, x, v_plan).
 
@@ -251,6 +260,8 @@ def _forward_sample(
         self_cond_cfg_scale=self_cond_cfg_scale,
         cond_seq=cond_seq, cond_seq_mask=cond_seq_mask,
         x_plan=x_plan, t_plan_batch=t_plan_batch,
+        plan_mask=plan_mask, nfe_counter=nfe_counter,
+        response_attention_mask=response_attention_mask,
     )
     if cfg_scale == 1.0:
         v_out, x_out = v_cond, x_cond
@@ -266,6 +277,8 @@ def _forward_sample(
             self_cond_cfg_scale=self_cond_cfg_scale,
             cond_seq=torch.zeros_like(cond_seq), cond_seq_mask=cond_seq_mask,
             x_plan=x_plan, t_plan_batch=t_plan_batch,
+            plan_mask=plan_mask, nfe_counter=nfe_counter,
+            response_attention_mask=response_attention_mask,
         )
         v_out = v_uncond + cfg_scale * (v_cond - v_uncond)
         x_out = x_uncond + cfg_scale * (x_cond - x_uncond)
@@ -278,6 +291,8 @@ def _forward_sample(
             self_cond_cfg_scale=self_cond_cfg_scale,
             cond_seq=cond_seq, cond_seq_mask=cond_seq_mask,
             x_plan=x_plan_null, t_plan_batch=t_plan_zero,
+            plan_mask=plan_mask, nfe_counter=nfe_counter,
+            response_attention_mask=response_attention_mask,
         )
         v_out = v_null + plan_cfg_scale * (v_out - v_null)
         x_out = x_null + plan_cfg_scale * (x_out - x_null)
@@ -290,7 +305,10 @@ def _ode_step(
     config, cfg_scale, self_cond_cfg_scale,
     cond_seq, cond_seq_mask,
     z_plan=None, t_plan=None, t_plan_next=None,
-    z_plan_null=None, plan_cfg_scale=1.0,
+    z_plan_null=None, plan_cfg_scale=1.0, plan_mask=None,
+    plan_state_fn=None, plan_forward_trace=None, nfe_counter=None,
+    sde_noise_observer=None,
+    response_attention_mask=None,
 ):
     """Single ODE (Euler) step for sampling. Returns (z, x_pred, z_plan).
 
@@ -298,6 +316,10 @@ def _ode_step(
     (t_plan -> t_plan_next) using the plan velocity from the same forward.
     """
     t_batch = torch.full((z.shape[0],), float(t), dtype=z.dtype, device=z.device)
+    if plan_state_fn is not None:
+        z_plan, t_plan = plan_state_fn(float(t))
+        if plan_forward_trace is not None:
+            plan_forward_trace.append((float(t), float(t_plan)))
     t_plan_batch = (None if z_plan is None
                     else torch.full((z.shape[0],), float(t_plan), dtype=z.dtype, device=z.device))
     v_pred, x_pred, v_plan = _forward_sample(
@@ -305,7 +327,10 @@ def _ode_step(
         config=config, cfg_scale=cfg_scale, self_cond_cfg_scale=self_cond_cfg_scale,
         cond_seq=cond_seq, cond_seq_mask=cond_seq_mask,
         x_plan=z_plan, t_plan_batch=t_plan_batch,
+        plan_mask=plan_mask,
         x_plan_null=z_plan_null, plan_cfg_scale=plan_cfg_scale,
+        nfe_counter=nfe_counter,
+        response_attention_mask=response_attention_mask,
     )
     z_new = z + (t_next - t) * v_pred
     z_plan_new = z_plan if (z_plan is None or v_plan is None) else z_plan + (t_plan_next - t_plan) * v_plan
@@ -317,7 +342,10 @@ def _sde_step(
     config, cfg_scale, self_cond_cfg_scale,
     cond_seq, cond_seq_mask, gamma, generator,
     z_plan=None, t_plan=None, t_plan_next=None,
-    z_plan_null=None, plan_cfg_scale=1.0,
+    z_plan_null=None, plan_cfg_scale=1.0, plan_mask=None,
+    plan_state_fn=None, plan_forward_trace=None, nfe_counter=None,
+    sde_noise_observer=None,
+    response_attention_mask=None,
 ):
     """Per-step SDE-style sampler with hybrid (t-and-step) noise scaling. Returns (z, x_pred, z_plan).
 
@@ -335,8 +363,14 @@ def _sde_step(
         eps = torch.randn(z.shape, dtype=z.dtype, device=z.device) * config.denoiser_noise_scale
     else:
         eps = torch.randn(z.shape, generator=generator, dtype=z.dtype) * config.denoiser_noise_scale
+    if sde_noise_observer is not None:
+        sde_noise_observer(eps, t_back)
     z_back = restore_cond(alpha * z + (1.0 - alpha) * eps, cond_seq, cond_seq_mask)
     t_batch = torch.full((z.shape[0],), t_back, dtype=z.dtype, device=z.device)
+    if plan_state_fn is not None:
+        z_plan, t_plan = plan_state_fn(t_back)
+        if plan_forward_trace is not None:
+            plan_forward_trace.append((t_back, float(t_plan)))
     t_plan_batch = (None if z_plan is None
                     else torch.full((z.shape[0],), float(t_plan), dtype=z.dtype, device=z.device))
     v_pred, x_pred, v_plan = _forward_sample(
@@ -344,7 +378,10 @@ def _sde_step(
         config=config, cfg_scale=cfg_scale, self_cond_cfg_scale=self_cond_cfg_scale,
         cond_seq=cond_seq, cond_seq_mask=cond_seq_mask,
         x_plan=z_plan, t_plan_batch=t_plan_batch,
+        plan_mask=plan_mask,
         x_plan_null=z_plan_null, plan_cfg_scale=plan_cfg_scale,
+        nfe_counter=nfe_counter,
+        response_attention_mask=response_attention_mask,
     )
     z_new = z_back + (t_next - t_back) * v_pred
     z_plan_new = z_plan if (z_plan is None or v_plan is None) else z_plan + (t_plan_next - t_plan) * v_plan

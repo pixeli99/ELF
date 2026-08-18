@@ -90,9 +90,25 @@ class TextRotaryEmbeddingFast(nn.Module):
         freqs_sin = torch.cat(sin_parts, dim=0) if len(sin_parts) > 1 else sin_parts[0]
         return freqs_cos, freqs_sin
 
-    def forward(self, t: torch.Tensor) -> torch.Tensor:
-        freqs_cos = self.freqs_cos.to(t.dtype)
-        freqs_sin = self.freqs_sin.to(t.dtype)
+    def forward(self, t: torch.Tensor, num_empty_token: Optional[int] = None) -> torch.Tensor:
+        if num_empty_token is None or num_empty_token == self.num_empty_token:
+            freqs_cos = self.freqs_cos
+            freqs_sin = self.freqs_sin
+        else:
+            if not 0 <= num_empty_token <= self.num_empty_token:
+                raise ValueError("runtime empty-token count exceeds configured maximum")
+            token_count = t.shape[-2] - num_empty_token
+            main_start = self.num_empty_token
+            freqs_cos = torch.cat([
+                self.freqs_cos[:num_empty_token],
+                self.freqs_cos[main_start:main_start + token_count],
+            ], dim=0)
+            freqs_sin = torch.cat([
+                self.freqs_sin[:num_empty_token],
+                self.freqs_sin[main_start:main_start + token_count],
+            ], dim=0)
+        freqs_cos = freqs_cos.to(t.dtype)
+        freqs_sin = freqs_sin.to(t.dtype)
         return t * freqs_cos + rotate_half(t) * freqs_sin
 
 

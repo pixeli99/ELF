@@ -23,6 +23,7 @@ byte-for-byte the original ELF (no extra RNG draws, no change to the loss graph)
 """
 
 import contextlib
+import hashlib
 from typing import Dict, Tuple
 
 import torch
@@ -31,6 +32,10 @@ import torch.nn.functional as F
 
 from utils.train_utils import TrainState, ema_update, unwrap_model
 from utils.encoder_utils import encode_text
+from utils.loss_utils import token_cross_entropy, token_feature_mse
+from utils.plan_utils import (
+    apply_plan_whitening, build_thinking_plan_target,
+)
 from utils.sampling_utils import (
     sample_cfg_scale, add_noise, sample_timesteps,
     net_out_to_v_x, restore_cond,
@@ -40,12 +45,18 @@ from utils.sampling_utils import (
 def _trainable_params(model: nn.Module):
     return [p for p in model.parameters() if p.requires_grad]
 
+def _diagnostic_tensor_hash(value):
+    array=value.detach().cpu().contiguous().numpy()
+    return hashlib.sha256(str((array.shape,array.dtype)).encode()+array.tobytes()).hexdigest()
+
 
 def train_step(
     state: TrainState,
     encoder: nn.Module,
     batch: Dict[str, torch.Tensor],
     config,
+    plan_encoder: nn.Module = None,
+    update_model: bool = True,
 ) -> Tuple[TrainState, Dict[str, float]]:
     """Perform a single training step."""
     device = next(state.model.parameters()).device
@@ -58,13 +69,21 @@ def train_step(
     decoder_noise_scale = config.decoder_noise_scale
 
     plan_enabled = config.num_plan_slots > 0
-    if plan_enabled and config.plan_resampler != "frozen_pool":
+    plan_source = getattr(config, "plan_source", "frozen_pool")
+    if plan_enabled and config.plan_resampler != "frozen_pool" and plan_source == "frozen_pool":
         raise NotImplementedError(
             f"plan_resampler={config.plan_resampler!r} is not implemented in v1; "
             "use 'frozen_pool' (learnable resampler is a Step-2 ablation)."
         )
 
     gen = state.dropout_generator
+    def schedule_seed(name,offset=0):
+        if name not in batch:return
+        values=batch[name].reshape(-1)
+        if values.numel()!=1:raise ValueError("common schedule training requires microbatch=1")
+        seed=(int(values.item())+int(offset))%(2**63-1)
+        torch.manual_seed(seed);gen.manual_seed(seed)
+        if device.type=="cuda":torch.cuda.manual_seed_all(seed)
 
     # encoder_attention_mask: cond sees cond, x sees all
     input_ids = batch["input_ids"].to(device, non_blocking=True).long()
@@ -94,6 +113,7 @@ def train_step(
 
     batch_size, seq_length = x0.shape[0], x0.shape[1]
 
+    schedule_seed("token_time_seed")
     t = sample_timesteps(
         batch_size,
         P_mean=config.denoiser_p_mean, P_std=config.denoiser_p_std,
@@ -101,6 +121,7 @@ def train_step(
         device=device, dtype=dtype,
     )
 
+    schedule_seed("response_noise_seed")
     noise = torch.randn(x0.shape, dtype=dtype, device=device)
 
     if config.pad_token == "pad":
@@ -122,6 +143,7 @@ def train_step(
 
     # Per-example branching: each example independently picks decoder (CE) vs.
     # denoiser (L2) instead of one scalar bernoulli per step. Smooths training
+    schedule_seed("branch_seed")
     decoder_step_active = torch.bernoulli(
         torch.full((batch_size,), decoder_prob, dtype=torch.float32),
         generator=gen,
@@ -144,7 +166,7 @@ def train_step(
     # ---- Planning stream: build target, sample its clock, noise it, per-row mix. ----
     # All plan RNG draws are guarded by plan_enabled, so the disabled path draws nothing
     # extra and the global RNG stream is identical to the original ELF.
-    plan_z = plan_t = x0_plan = None
+    plan_z = plan_t = x0_plan = plan_mask = None
     x_plan_input = t_plan_input = None
     plan_x_aux = plan_t_aux = None  # plan inputs for the auxiliary (self-cond) forwards
     plan_supervised = plan_enabled and not config.plan_register_only
@@ -153,20 +175,58 @@ def train_step(
         # (pure noise at t_plan = 0 on every row, decoder rows included) and get no plan
         # loss. Isolates the ViT-registers effect from the planning effect.
         inner_model = unwrap_model(state.model)
+        if plan_source == "thinking_mlp_4to1":
+            token_lengths = batch["plan_attention_mask"].sum(dim=1).to(device)
+            slot_lengths = torch.div(token_lengths + 3, 4, rounding_mode="floor")
+            runtime_k = int(slot_lengths.max())
+            plan_mask = torch.arange(runtime_k, device=device)[None, :] < slot_lengths[:, None]
+        else:
+            runtime_k = config.num_plan_slots
+            plan_mask = torch.ones((batch_size, runtime_k), dtype=torch.bool, device=device)
+        schedule_seed("plan_noise_seed")
         plan_noise = torch.randn(
-            (batch_size, config.num_plan_slots, inner_model.plan_latent_dim),
+            (batch_size, runtime_k, inner_model.plan_latent_dim),
             dtype=dtype, device=device,
         )
-        x_plan_input = plan_noise * config.denoiser_noise_scale
+        x_plan_input = (plan_noise * config.denoiser_noise_scale
+                        * plan_mask.unsqueeze(-1).to(dtype))
         t_plan_input = torch.zeros_like(t)
         plan_x_aux, plan_t_aux = x_plan_input, t_plan_input
     elif plan_enabled:
         inner_model = unwrap_model(state.model)
-        x0_plan = inner_model.build_plan_target(x0, loss_mask)  # (B, K, D), whitened
+        if plan_source == "thinking_mlp_4to1":
+            if plan_encoder is None:
+                raise ValueError("thinking_mlp_4to1 requires a frozen plan_encoder")
+            plan_input_ids = batch["plan_input_ids"].to(device, non_blocking=True).long()
+            plan_token_mask = batch["plan_attention_mask"].to(device, non_blocking=True).bool()
+            with torch.no_grad(), torch.amp.autocast(
+                'cuda', dtype=torch.bfloat16, enabled=use_bf16,
+            ):
+                plan_token_latents = encoder(
+                    input_ids=plan_input_ids,
+                    attention_mask=plan_token_mask,
+                    deterministic=True,
+                ).float()
+                raw_plan, plan_mask = build_thinking_plan_target(
+                    plan_token_latents, plan_token_mask, plan_encoder,
+                    max_plan_slots=getattr(config, "max_plan_slots", None) or config.num_plan_slots,
+                )
+                x0_plan = apply_plan_whitening(inner_model, raw_plan, plan_mask).to(dtype)
+                # Read-only fixed-noise diagnostics may remove plan content while
+                # preserving the runtime K/mask. Absent this explicit key, training
+                # behavior is byte-for-byte unchanged.
+                if bool(batch.get("diagnostic_zero_plan_content", False)):
+                    x0_plan = torch.zeros_like(x0_plan)
+        elif plan_source == "frozen_pool":
+            x0_plan = inner_model.build_plan_target(x0, loss_mask)  # legacy fixed-K target
+            plan_mask = torch.ones(x0_plan.shape[:2], dtype=torch.bool, device=device)
+        else:
+            raise ValueError(f"Unknown plan_source: {plan_source!r}")
         # Plan clock. "uniform" (science arm): t_plan | t ~ U[0,1], so the training density
         # along ANY monotone trajectory equals f(t)·1 — diagonal / leading / lagging inference
         # paths are covered equally. The t_plan=1 atom covers the dwell segment of saturating
         # lead trajectories. "logit_normal" matches the token clock (systems arm).
+        schedule_seed("plan_time_seed")
         if config.plan_time_schedule == "uniform":
             plan_t_raw = torch.rand((batch_size,), dtype=dtype, device=device)
         elif config.plan_time_schedule == "logit_normal":
@@ -186,14 +246,22 @@ def train_step(
             plan_t = torch.where(on_diag, t, plan_t_raw)
         else:
             plan_t = plan_t_raw
+        schedule_seed("plan_noise_seed")
         plan_noise = torch.randn(x0_plan.shape, dtype=dtype, device=device)
         plan_z = add_noise(x0_plan, plan_noise, plan_t, config)
+        plan_z = plan_z * plan_mask.unsqueeze(-1).to(plan_z.dtype)
         # Per-row mix (same as tokens): decoder rows -> clean plan at t_plan=1,
         # denoiser rows -> noised plan at t_plan.
-        t_plan_input = decoder_step_active * torch.ones_like(t) + (1.0 - decoder_step_active) * plan_t
-        x_plan_input = decoder_mask_B11 * x0_plan + (1.0 - decoder_mask_B11) * plan_z
+        if getattr(config,"group_mode","ordered")=="diagonal":
+            # Diagonal specialist uses the same clock and noised plan on every row,
+            # including decoder rows; otherwise decoder mixing would silently force t_plan=1.
+            t_plan_input=plan_t;x_plan_input=plan_z
+        else:
+            t_plan_input = decoder_step_active * torch.ones_like(t) + (1.0 - decoder_step_active) * plan_t
+            x_plan_input = decoder_mask_B11 * x0_plan + (1.0 - decoder_mask_B11) * plan_z
         plan_x_aux, plan_t_aux = plan_z, plan_t
 
+    schedule_seed("branch_seed",offset=1)
     if self_cond_prob > 0:
         use_self_cond_mask = (
             (torch.rand((batch_size,), dtype=dtype, device=device) < self_cond_prob)
@@ -222,6 +290,7 @@ def train_step(
                 z_input_uncond, t_input,
                 deterministic=True, self_cond_cfg_scale=self_cond_cfg_scale,
                 x_plan=plan_x_aux, t_plan=plan_t_aux,
+                plan_mask=plan_mask,
             )
         return net_out_uncond
 
@@ -232,6 +301,7 @@ def train_step(
                     z, t_input,
                     deterministic=True, self_cond_cfg_scale=self_cond_cfg_scale,
                     x_plan=plan_x_aux, t_plan=plan_t_aux,
+                    plan_mask=plan_mask,
                 )
             v_uncond, _ = net_out_to_v_x(net_out_uncond, z, t_input, t_eps)
             return v_uncond, v_uncond
@@ -245,6 +315,7 @@ def train_step(
                 z_input_cond, t_input,
                 deterministic=True, self_cond_cfg_scale=self_cond_cfg_scale,
                 x_plan=plan_x_aux, t_plan=plan_t_aux,
+                plan_mask=plan_mask,
             )
         v_cond, _ = net_out_to_v_x(net_out_cond, z, t_input, t_eps)
         return v_cond, v_uncond
@@ -269,7 +340,7 @@ def train_step(
             )
         return base_v_target
 
-    model.train()
+    model.train(update_model)
 
     # Per-example branching: build a mixed input (decoder_z for decoder-mode
     # rows, denoiser_z for denoiser-mode rows). One forward computes both
@@ -305,11 +376,11 @@ def train_step(
             self_cond_cfg_scale=self_cond_cfg_scale,
             decoder_step_active=decoder_step_active,  # (B,) tensor
             x_plan=x_plan_input, t_plan=t_plan_input,
+            plan_mask=plan_mask,
         )
 
     # CE per-token (used on decoder-mode rows).
-    log_probs = F.log_softmax(decoder_logits.to(torch.float32), dim=-1)
-    ce_per_token = -log_probs.gather(-1, decoder_targets.unsqueeze(-1)).squeeze(-1)
+    ce_per_token = token_cross_entropy(decoder_logits, decoder_targets)
 
     # L2 per-token (used on denoiser-mode rows). v_pred is extracted with
     # (denoiser_z, t) — meaningful only for denoiser rows; decoder rows are
@@ -319,7 +390,7 @@ def train_step(
         denoiser_z, denoiser_t, base_v_target=v_target, x_tokens=x0,
         shared_net_out_uncond=shared_net_out_uncond,
     )
-    l2_per_token = ((v_pred - v_final_target) ** 2).mean(dim=-1)
+    l2_per_token = token_feature_mse(v_pred, v_final_target)
 
     # Masks: each position is "alive" for exactly one branch.
     loss_mask_f = loss_mask.to(ce_per_token.dtype)
@@ -347,34 +418,54 @@ def train_step(
     # When the plan stream is disabled (or in the register-only arm), `loss` is untouched.
     if plan_supervised:
         plan_l2_per_slot = ((plan_out - x0_plan) ** 2).mean(dim=-1)  # (B, K)
-        plan_row_mask = (1.0 - decoder_mask_B1).to(plan_l2_per_slot.dtype)     # (B, 1)
-        plan_denom = torch.clamp((plan_row_mask.expand_as(plan_l2_per_slot)).sum(), min=1.0)
-        plan_l2 = (plan_l2_per_slot * plan_row_mask).sum() / plan_denom
+        plan_row_mask = (1.0 - decoder_mask_B1).to(plan_l2_per_slot.dtype)
+        effective_plan_mask = plan_row_mask * plan_mask.to(plan_l2_per_slot.dtype)
+        plan_denom = torch.clamp(effective_plan_mask.sum(), min=1.0)
+        plan_l2 = (plan_l2_per_slot * effective_plan_mask).sum() / plan_denom
         loss = loss + config.plan_loss_weight * plan_l2
         plan_l2_val = plan_l2.detach()
     else:
         plan_l2_val = torch.zeros((), device=device)
 
-    accum_steps = max(config.grad_accum_steps, 1)
-    state.step += 1
-    is_optimizer_step = (state.step % accum_steps) == 0
+    grad_norm_val = torch.zeros((), device=device)
+    if update_model:
+        accum_steps = max(config.grad_accum_steps, 1)
+        state.step += 1
+        is_optimizer_step = (state.step % accum_steps) == 0
 
-    sync_ctx = model.no_sync() if (not is_optimizer_step and hasattr(model, 'no_sync')) else contextlib.nullcontext()
-    with sync_ctx:
+        # DDP synchronization is controlled by the caller, whose no_sync context
+        # covers both forward and backward. Wrapping backward alone is ineffective.
         (loss / accum_steps).backward()
 
-    if is_optimizer_step:
-        torch.nn.utils.clip_grad_norm_(_trainable_params(model), max_norm=1.0)
-        state.optimizer.step()
-        if state.lr_scheduler is not None:
-            state.lr_scheduler.step()
-        ema_update(state.ema_params1, state.model, config.ema_decay1)
-        state.optimizer.zero_grad(set_to_none=True)
+        if is_optimizer_step:
+            grad_norm_val = torch.nn.utils.clip_grad_norm_(_trainable_params(model), max_norm=1.0).detach()
+            state.optimizer.step()
+            if state.lr_scheduler is not None:
+                state.lr_scheduler.step()
+            ema_update(state.ema_params1, state.model, config.ema_decay1)
+            state.optimizer.zero_grad(set_to_none=True)
+    else:
+        is_optimizer_step = False
 
     metrics = {
         "loss": loss.detach(),
         "l2_loss": l2_loss_val,
         "ce_loss": ce_loss_val,
         "plan_l2_loss": plan_l2_val,
+        "gradient_norm": grad_norm_val,
+        "response_valid_tokens": loss_mask.sum().detach(),
+        "plan_valid_slots": (plan_mask.sum().detach() if plan_mask is not None
+                             else torch.zeros((), device=device)),
+        "plan_capacity_slots": (torch.tensor(plan_mask.numel(), device=device)
+                                if plan_mask is not None else torch.zeros((), device=device)),
+        "optimizer_step": is_optimizer_step,
+        "denoiser_rows": (1.0 - decoder_mask_B1).sum().detach(),
+        "decoder_rows": decoder_mask_B1.sum().detach(),
+        "plan_present": bool(x_plan_input is not None),
+        "plan_time_equal_token": bool(plan_t is not None and torch.equal(plan_t, t)),
+        "plan_time_all_zero": bool(t_plan_input is not None and torch.count_nonzero(t_plan_input).item() == 0),
+        "register_no_thinking_target": bool(config.plan_register_only and x0_plan is None),
     }
+    if bool(getattr(config,"engineering_smoke_report",False)):
+        metrics.update({"response_noise_sha256":_diagnostic_tensor_hash(noise),"token_time_sha256":_diagnostic_tensor_hash(t),"branch_sha256":_diagnostic_tensor_hash(decoder_step_active),"plan_mask_sha256":(_diagnostic_tensor_hash(plan_mask) if plan_mask is not None else None),"plan_input_sha256":(_diagnostic_tensor_hash(x_plan_input) if x_plan_input is not None else None)})
     return state, metrics

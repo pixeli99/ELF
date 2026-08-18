@@ -15,6 +15,51 @@ from modules.layers import (
 )
 
 
+PLAN_RESPONSE_ATTENTION_MODES = ("bidirectional", "causal_bottleneck")
+
+
+def build_plan_response_attention_mask(
+    token_valid: torch.Tensor,
+    plan_valid: torch.Tensor,
+    prefix_len: int,
+    mode_len: int,
+    num_time_tokens: int,
+    num_plan_time_tokens: int,
+    mode: str,
+) -> torch.Tensor:
+    """Build padding/key permissions for the runtime [prefix, mode, plan, response] layout."""
+    if mode not in PLAN_RESPONSE_ATTENTION_MODES:
+        raise ValueError(f"unknown plan_response_attention={mode!r}")
+    batch, response_len = token_valid.shape
+    plan_len = plan_valid.shape[1]
+    device = token_valid.device
+    prefix_valid = torch.ones((batch, prefix_len), dtype=torch.bool, device=device)
+    mode_valid = torch.ones((batch, mode_len), dtype=torch.bool, device=device)
+    valid = torch.cat((prefix_valid, mode_valid, plan_valid.bool(), token_valid.bool()), dim=1)
+    if mode == "bidirectional":
+        return valid
+
+    total = valid.shape[1]
+    allowed = valid[:, None, :].expand(batch, total, total).clone()
+    plan_start = prefix_len + mode_len
+    plan_end = plan_start + plan_len
+    plan_time_start = num_time_tokens
+    plan_time_end = min(prefix_len, plan_time_start + num_plan_time_tokens)
+    # Shared time/CFG/mode tokens may absorb response information in earlier layers.
+    # The entire plan side (plan-time + plan slots) therefore reads only itself.
+    plan_query_parts = []
+    if plan_time_end > plan_time_start:
+        plan_query_parts.append(torch.arange(plan_time_start, plan_time_end, device=device))
+    plan_query_parts.append(torch.arange(plan_start, plan_end, device=device))
+    plan_queries = torch.cat(plan_query_parts)
+    allowed[:, plan_queries, :] = False
+    allowed[:, plan_queries, plan_time_start:plan_time_end] = True
+    allowed[:, plan_queries, plan_start:plan_end] = plan_valid[:, None, :]
+    # Invalid plan queries produce no attention result and are zeroed at the output head.
+    allowed[:, plan_start:plan_end, :] &= plan_valid[:, :, None]
+    return allowed
+
+
 class ELFBlock(nn.Module):
     """ELF Transformer block."""
 
@@ -81,6 +126,7 @@ class ELF(nn.Module):
         num_plan_time_tokens: int = 4,
         plan_whiten: str = "zscore",
         plan_target_dim: int = 0,
+        plan_response_attention: str = "bidirectional",
     ):
         super().__init__()
         self.text_encoder_dim = text_encoder_dim
@@ -99,6 +145,9 @@ class ELF(nn.Module):
         self.gradient_checkpointing = gradient_checkpointing
         self.num_plan_slots = num_plan_slots
         self.num_plan_time_tokens = num_plan_time_tokens
+        if plan_response_attention not in PLAN_RESPONSE_ATTENTION_MODES:
+            raise ValueError(f"unknown plan_response_attention={plan_response_attention!r}")
+        self.plan_response_attention = plan_response_attention
 
         # Self-conditioning input projection (only used when input is [z, x_pred]).
         self.self_cond_proj = _make_linear(2 * text_encoder_dim, text_encoder_dim, bias=True)
@@ -210,17 +259,8 @@ class ELF(nn.Module):
         The whitening stats are dataset constants (buffers); the plan is never un-whitened —
         it only ever conditions the model, so its latent space is free to be standardized.
         """
-        from utils.sampling_utils import frozen_pool_plan_target
-        pooled = frozen_pool_plan_target(x0, valid_mask, self.num_plan_slots)
-        if self.plan_whiten == "none":
-            return pooled
-        if self.plan_whiten == "pca":
-            if int(self.plan_whiten_ready.item()) == 0:
-                raise RuntimeError("plan_whiten='pca' used before fitting the whitener "
-                                   "(run the pre-training stats pass)")
-            return (pooled - self.plan_target_mean) @ self.plan_target_proj
-        # "zscore": identity until fitted (mean 0 / std 1), i.e. the raw pooled target.
-        return (pooled - self.plan_target_mean) / self.plan_target_std
+        from utils.plan_utils import build_plan_target
+        return build_plan_target(self, x0, valid_mask)
 
     def build_context(self, t: torch.Tensor,
                       t_plan: Optional[torch.Tensor] = None,
@@ -257,6 +297,7 @@ class ELF(nn.Module):
         decoder_step_active: Optional[bool] = None,
         x_plan: Optional[torch.Tensor] = None,
         t_plan: Optional[torch.Tensor] = None,
+        plan_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """x: (N, S, C) or (N, S, 2C) with self-cond. t: (N,). attention_mask: (N, S), 1=valid.
 
@@ -271,10 +312,29 @@ class ELF(nn.Module):
         # real training always passes x_plan / t_plan.
         plan_enabled = self.num_plan_slots > 0
         if plan_enabled:
+            if attention_mask is None:
+                attention_mask = torch.ones(
+                    x.shape[:2], dtype=torch.bool, device=x.device,
+                )
             if x_plan is None:
                 x_plan = x.new_zeros((B, self.num_plan_slots, self.plan_latent_dim))
+            runtime_plan_slots = x_plan.shape[1]
+            if runtime_plan_slots > self.num_plan_slots:
+                raise ValueError(
+                    f"runtime plan has {runtime_plan_slots} slots, exceeds "
+                    f"max_plan_slots={self.num_plan_slots}"
+                )
+            if plan_mask is None:
+                plan_mask = torch.ones(
+                    (B, runtime_plan_slots), dtype=torch.bool, device=x.device,
+                )
+            elif tuple(plan_mask.shape) != (B, runtime_plan_slots):
+                raise ValueError("plan_mask must have shape [B, K_batch]")
             if t_plan is None:
                 t_plan = t.new_ones((t.shape[0],))
+            response_attention_mask = attention_mask.bool()
+        else:
+            runtime_plan_slots = 0
 
         # Self-conditioning: input is [z, x_pred] when 2x encoder dim
         with torch.amp.autocast('cuda', enabled=False):
@@ -282,18 +342,22 @@ class ELF(nn.Module):
                 x = self.self_cond_proj(x.float())
             x = self.text_proj(x.float())
             if plan_enabled:
-                plan_hidden_in = self.plan_in_proj(x_plan.float()) + self.plan_slot_embed
+                plan_hidden_in = (
+                    self.plan_in_proj(x_plan.float())
+                    + self.plan_slot_embed[:, :runtime_plan_slots]
+                )
             context_prefix_tokens = self.build_context(t, t_plan, self_cond_cfg_scale)
 
         # Insert plan slots before mode tokens so the final layout is [prefix, mode, plan, tokens].
         plan_offset = 0
         if plan_enabled:
             x = torch.cat([plan_hidden_in, x], dim=1)
-            plan_offset = self.num_plan_slots
+            plan_offset = runtime_plan_slots
             if attention_mask is not None:
-                plan_mask = torch.ones((B, self.num_plan_slots),
-                                       dtype=attention_mask.dtype, device=attention_mask.device)
-                attention_mask = torch.cat([plan_mask, attention_mask], dim=1)
+                attention_mask = torch.cat([
+                    plan_mask.to(dtype=attention_mask.dtype, device=attention_mask.device),
+                    attention_mask,
+                ], dim=1)
 
         # Prepend learnable model-mode tokens (gated by decoder_step_active).
         # decoder_step_active may be None / Python bool / (B,) tensor — the last
@@ -325,16 +389,31 @@ class ELF(nn.Module):
                                          dtype=attention_mask.dtype, device=attention_mask.device)
                 attention_mask = torch.cat([prefix_mask, attention_mask], dim=1)
 
+        if plan_enabled:
+            attention_mask = build_plan_response_attention_mask(
+                token_valid=response_attention_mask,
+                plan_valid=plan_mask,
+                prefix_len=prefix_len,
+                mode_len=model_mode_offset,
+                num_time_tokens=self.num_time_tokens,
+                num_plan_time_tokens=self.num_plan_time_tokens,
+                mode=self.plan_response_attention,
+            )
+
         use_checkpoint = self.gradient_checkpointing and self.training and torch.is_grad_enabled()
+        runtime_empty_tokens = prefix_len + model_mode_offset + plan_offset
+        rope_fn = lambda value: self.feat_rope(
+            value, num_empty_token=runtime_empty_tokens,
+        )
         for block in self.blocks:
             if use_checkpoint:
                 def _block_forward(hidden: torch.Tensor, block: ELFBlock = block) -> torch.Tensor:
-                    return block(hidden, rope_fn=self.feat_rope, attention_mask=attention_mask,
+                    return block(hidden, rope_fn=rope_fn, attention_mask=attention_mask,
                                  deterministic=deterministic)
 
                 x = checkpoint(_block_forward, x, use_reentrant=False)
             else:
-                x = block(x, rope_fn=self.feat_rope, attention_mask=attention_mask,
+                x = block(x, rope_fn=rope_fn, attention_mask=attention_mask,
                           deterministic=deterministic)
 
         # Split out plan slots (between mode tokens and token positions) and token positions.
@@ -354,6 +433,7 @@ class ELF(nn.Module):
             plan_output = None
             if plan_enabled:
                 plan_output = self.plan_head(self.plan_norm(plan_hidden_out.float()))
+                plan_output = plan_output * plan_mask.to(plan_output.dtype).unsqueeze(-1)
         return output, decoder_logits, plan_output
 
 

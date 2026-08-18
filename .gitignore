@@ -1,4 +1,25 @@
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+.env
+.DS_Store
+
+# Local datasets, model artifacts, experiment outputs, and logs are not handed off.
+data/
+artifacts/
 outputs/
+results/
+logs/
+checkpoints/
 wandb/
+hf_cache/
+*.log
+*.console.log
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.backup
+*.bak

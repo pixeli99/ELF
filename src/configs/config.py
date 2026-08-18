@@ -70,6 +70,25 @@ class Config:
     num_plan_slots: int = 0            # K planning slots (second stream); 0 disables the plan stream
     num_plan_time_tokens: int = 4      # In-context time tokens carrying the plan clock t_plan
     plan_resampler: str = "frozen_pool"  # How the plan target x0_plan is built: "frozen_pool" | "learnable"
+    plan_source: str = "frozen_pool"  # "frozen_pool" | "thinking_mlp_4to1"
+    plan_response_attention: str = "bidirectional"  # "bidirectional" | "causal_bottleneck"
+    max_plan_slots: int = None  # Runtime cap for variable thinking slots; defaults to num_plan_slots
+    thinking_data_path: str = None
+    thinking_resampler_checkpoint: str = None
+    thinking_split: str = "80_10_10"
+    thinking_plan_add_special_tokens: bool = True
+    formal_stage_b_manifest: str = None
+    formal_stage_b_manifest_sha256: str = None
+    formal_stage_b_schedule: str = None
+    formal_stage_b_schedule_sha256: str = None
+    group_mode: str = "ordered"  # ordered | diagonal | register | vanilla
+    frozen_thinking_encoder: str = None
+    thinking_whitener_artifact: str = None
+    frozen_stage_a_checkpoint_sha256: str = None
+    frozen_encoder_sha256: str = None
+    whitening_manifest_sha256: str = None
+    save_optimizer_steps: list = None
+    engineering_smoke_report: bool = False
     plan_loss_weight: float = 1.0      # lambda_plan: weight on the plan-stream velocity L2
     # --- plan clock training distribution (2D time grid coverage) ---
     # Science-arm default: t_plan | t ~ U[0,1] plus an atom at t_plan=1. Conditional-uniform makes
@@ -120,6 +139,7 @@ class Config:
     epochs: int = 200
     warmup_epochs: float = None
     warmup_steps: int = 5000
+    warmup_optimizer_steps: int = None  # Explicit optimizer-step warmup; overrides micro-step fields.
     batch_size: int = None
     global_batch_size: int = 512
     lr: float = None
@@ -134,6 +154,10 @@ class Config:
     use_bf16: bool = True  # Use CUDA BF16 autocast for training/eval forward passes.
     use_compile: bool = False  # Wrap the eval/sampling model in torch.compile.
     gradient_checkpointing: bool = False  # Save activation memory by recomputing ELF blocks during backward.
+    ddp_find_unused_parameters: bool = False
+    ddp_replicated_optimizer: bool = False  # Full optimizer state on every rank for exact resume.
+    max_train_steps: int = -1  # Debug only; if >0 stop training after this many global training steps.
+    max_optimizer_steps: int = None
 
     # EMA
     ema_decay1: float = 0.9999
@@ -143,6 +167,10 @@ class Config:
     # Sampling configs sweep (list of SamplingConfig objects, loaded from YAML)
     sampling_configs: list = [SamplingConfig()]
     num_samples: int = 100
+    # Eval-only paired trajectory ablation. When enabled, trajectories with the same
+    # seed/rank/step-count/batch use the same RNG stream; trajectory identity is excluded.
+    paired_trajectory_eval: bool = False
+    paired_eval_base_seed: int = 42
 
     # PPL Evaluation
     online_eval: bool = True  # Enable PPL evaluation for generated samples
@@ -159,6 +187,7 @@ class Config:
     output_dir: str = "./output_dir"
     hf_repo_id: str = None  # Optional HF repo id to mirror local outputs/checkpoints.
     resume: str = None
+    init_from: str = None  # Optional model-only warm-start checkpoint/HF id; does not restore optimizer/step.
 
     # Wandb
     use_wandb: bool = False
@@ -181,6 +210,11 @@ def load_config_from_yaml(path: str) -> Config:
 
     with open(path, "r") as f:
         cfg_dict = yaml.safe_load(f) or {}
+    base_path = cfg_dict.pop("base_config", None)
+    if base_path:
+        if not os.path.isabs(base_path):
+            base_path = os.path.normpath(os.path.join(os.path.dirname(path), base_path))
+        config = load_config_from_yaml(base_path)
 
     for key, value in cfg_dict.items():
         if key == "sampling_configs":

@@ -1,0 +1,13 @@
+version: 1
+checkpoint_group: ordered
+execution: single_gpu_single_process_serial
+mode_order: [null, self_planning_first, oracle_matched, oracle_shuffled]
+nfe: 32
+null: {trajectory: null, plan_clock: 0.0, fixed_initial_gaussian: true}
+self_planning_first: {trajectory: planning_first, alpha: 2.0}
+oracle_matched: {plan_clock: 1.0, fixed_clean_thinking_plan: true}
+oracle_shuffled: {plan_clock: 1.0, fixed_clean_thinking_plan: true, donor: exact_k_unique}
+old_consistency_enabled: false
+extra_matched_reference_enabled: false
+cross_gpu_bitwise_gate_enabled: false
+seed: 42

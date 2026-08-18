@@ -66,6 +66,17 @@ def _generate_samples_single_batch(
     self_cond_cfg_scale: float,
     record_plan: bool = False,
     plan_override: Optional[list] = None,
+    plan_override_t: Optional[float] = None,
+    freeze_plan_override: bool = False,
+    plan_mask: Optional[torch.Tensor] = None,
+    initial_plan_noise: Optional[torch.Tensor] = None,
+    plan_state_fn=None,
+    plan_forward_trace=None,
+    nfe_counter=None,
+    sde_noise_observer=None,
+    response_attention_mask: Optional[torch.Tensor] = None,
+    response_state_trace=None,
+    response_step_observer=None,
 ) -> torch.Tensor:
     """Generate samples for a single batch (PyTorch Euler / SDE rollout).
 
@@ -73,9 +84,23 @@ def _generate_samples_single_batch(
     per step plus the final decode plan (n entries for an n-point t_steps grid).
     plan_override: a list with the same layout that REPLACES the plan fed at each step
     (plan grafting / shuffle probes); the plan's own Euler updates are then discarded.
+    plan_override_t: optional fixed clock for overridden plans. Oracle-plan eval uses 1.0.
+    freeze_plan_override: when True, re-apply the overridden plan after every sampler update.
+    initial_plan_noise: optional explicit latent at t_plan=0 for paired plan-RNG protocols.
+    plan_state_fn: optional endpoint-correct analytic oracle state at the actual model-forward time.
     """
     method = sampling_config.sampling_method
     batch_size, max_length, d_model = z.shape
+    if response_attention_mask is not None:
+        if tuple(response_attention_mask.shape) != (batch_size, max_length):
+            raise ValueError("response_attention_mask must have shape [B,response_width]")
+        response_attention_mask = response_attention_mask.to(device=z.device, dtype=torch.bool)
+        response_keep = response_attention_mask.unsqueeze(-1).to(dtype=z.dtype)
+        z = z * response_keep
+        if response_step_observer is not None:
+            response_step_observer("initial", z)
+        if response_state_trace is not None:
+            response_state_trace.append(float(z.masked_select((~response_attention_mask).unsqueeze(-1).expand_as(z)).abs().max().item()) if (~response_attention_mask).any() else 0.0)
     if cond_seq is None:
         cond_seq = torch.zeros((batch_size, max_length, d_model), dtype=z.dtype, device=z.device)
         cond_seq_mask = torch.zeros((batch_size, max_length), dtype=z.dtype, device=z.device)
@@ -93,21 +118,41 @@ def _generate_samples_single_batch(
     #   null           -> t_plan == 0 throughout (plan stays pure noise; register probe)
     plan_on = config.num_plan_slots > 0
     if plan_on:
+        runtime_plan_slots = (plan_mask.shape[1] if plan_mask is not None
+                              else config.num_plan_slots)
+        if runtime_plan_slots > config.num_plan_slots:
+            raise ValueError("runtime plan_mask exceeds configured plan capacity")
+        if plan_mask is not None and tuple(plan_mask.shape) != (batch_size, runtime_plan_slots):
+            raise ValueError("plan_mask must have shape [B,K_batch]")
         traj = getattr(sampling_config, "plan_trajectory", "diagonal")
         if traj == "null":
             alpha = 0.0
+        elif traj == "endpoint_correct_lagging":
+            alpha = None
         elif traj == "planning_first":
             alpha = float(getattr(sampling_config, "plan_lead_alpha", 1.0))
         else:  # "diagonal"
             alpha = 1.0
-        t_plan_steps = torch.clamp(t_steps * alpha, max=1.0)
+        if traj == "endpoint_correct_lagging":
+            t_plan_steps = torch.clamp(2.0 * t_steps - 1.0, min=0.0, max=1.0)
+        else:
+            t_plan_steps = torch.clamp(t_steps * alpha, max=1.0)
         d_plan = getattr(model, "plan_latent_dim", d_model)
-        if z.is_cuda:
-            z_plan = torch.randn((batch_size, config.num_plan_slots, d_plan),
+        if initial_plan_noise is not None:
+            expected=(batch_size,runtime_plan_slots,d_plan)
+            if tuple(initial_plan_noise.shape)!=expected:
+                raise ValueError(f'initial_plan_noise shape {tuple(initial_plan_noise.shape)} != {expected}')
+            z_plan=initial_plan_noise.to(device=z.device,dtype=z.dtype).clone()
+        elif z.is_cuda:
+            z_plan = torch.randn((batch_size, runtime_plan_slots, d_plan),
                                  dtype=z.dtype, device=z.device) * config.denoiser_noise_scale
         else:
-            z_plan = (torch.randn((batch_size, config.num_plan_slots, d_plan),
+            z_plan = (torch.randn((batch_size, runtime_plan_slots, d_plan),
                                   generator=generator, dtype=z.dtype) * config.denoiser_noise_scale).to(z.device)
+        if plan_override is not None:
+            z_plan = plan_override[0].to(device=z.device, dtype=z.dtype)
+        if plan_state_fn is not None:
+            z_plan, _ = plan_state_fn(float(t_steps[0].item()))
     else:
         t_plan_steps = None
         z_plan = None
@@ -122,20 +167,34 @@ def _generate_samples_single_batch(
         cfg_scale=cfg_scale, self_cond_cfg_scale=self_cond_cfg_scale,
         cond_seq=cond_seq, cond_seq_mask=cond_seq_mask,
         z_plan_null=z_plan_null, plan_cfg_scale=plan_cfg_scale,
+        plan_mask=plan_mask,
+        plan_state_fn=plan_state_fn, plan_forward_trace=plan_forward_trace,
+        nfe_counter=nfe_counter, sde_noise_observer=sde_noise_observer,
+        response_attention_mask=response_attention_mask,
     )
 
     def _tp(i):
+        if plan_on and plan_override is not None and plan_override_t is not None:
+            return float(plan_override_t)
         return t_plan_steps[i].item() if plan_on else None
 
     plan_traj = [] if record_plan else None
 
-    def _pre_step(i):
-        """Override / record the plan latent fed at step i."""
+    def _override_at(i):
         nonlocal z_plan
         if plan_on and plan_override is not None:
             z_plan = plan_override[i].to(device=z.device, dtype=z.dtype)
+
+    def _pre_step(i):
+        """Override / record the plan latent fed at step i."""
+        _override_at(i)
         if plan_on and record_plan:
             plan_traj.append(z_plan.detach().clone())
+
+    def _freeze_analytic(t_value):
+        nonlocal z_plan
+        if plan_on and plan_state_fn is not None:
+            z_plan, _ = plan_state_fn(float(t_value))
 
     use_bf16 = bool(getattr(config, "use_bf16", True)) and z.is_cuda
     with torch.amp.autocast('cuda', dtype=torch.bfloat16, enabled=use_bf16):
@@ -149,11 +208,29 @@ def _generate_samples_single_batch(
                     gamma=sde_gamma, generator=generator,
                     z_plan=z_plan, t_plan=_tp(i), t_plan_next=_tp(i + 1), **step_kwargs,
                 )
+                if response_attention_mask is not None:
+                    z.mul_(response_keep); x_pred.mul_(response_keep)
+                    if response_step_observer is not None:
+                        response_step_observer(i, z)
+                    if response_state_trace is not None:
+                        response_state_trace.append(float(z.masked_select((~response_attention_mask).unsqueeze(-1).expand_as(z)).abs().max().item()) if (~response_attention_mask).any() else 0.0)
+                if freeze_plan_override:
+                    _override_at(i)
+                _freeze_analytic(t_next)
             elif method == "ode":
                 z, x_pred, z_plan = _ode_step(
                     z=z, t=t, t_next=t_next, x_pred_prev=x_pred,
                     z_plan=z_plan, t_plan=_tp(i), t_plan_next=_tp(i + 1), **step_kwargs,
                 )
+                if response_attention_mask is not None:
+                    z.mul_(response_keep); x_pred.mul_(response_keep)
+                    if response_step_observer is not None:
+                        response_step_observer(i, z)
+                    if response_state_trace is not None:
+                        response_state_trace.append(float(z.masked_select((~response_attention_mask).unsqueeze(-1).expand_as(z)).abs().max().item()) if (~response_attention_mask).any() else 0.0)
+                if freeze_plan_override:
+                    _override_at(i)
+                _freeze_analytic(t_next)
             else:
                 raise ValueError(f"Invalid sampling method: {method}")
 
@@ -165,9 +242,20 @@ def _generate_samples_single_batch(
             z=z, t=t, t_next=t_next, x_pred_prev=x_pred,
             z_plan=z_plan, t_plan=_tp(n - 2), t_plan_next=_tp(n - 1), **step_kwargs,
         )
+        if response_attention_mask is not None:
+            z.mul_(response_keep); x_pred.mul_(response_keep)
+            if response_step_observer is not None:
+                response_step_observer(n - 2, z)
+            if response_state_trace is not None:
+                response_state_trace.append(float(z.masked_select((~response_attention_mask).unsqueeze(-1).expand_as(z)).abs().max().item()) if (~response_attention_mask).any() else 0.0)
+        if freeze_plan_override:
+            _override_at(n - 2)
+        _freeze_analytic(t_next)
     # The final decode plan (fed to _dlm_decode_batch at t_plan = 1).
     if plan_on and plan_override is not None:
         z_plan = plan_override[n - 1].to(device=z.device, dtype=z.dtype)
+    if plan_on and plan_state_fn is not None:
+        z_plan, _ = plan_state_fn(float(t_steps[-1].item()))
     if plan_on and record_plan:
         plan_traj.append(z_plan.detach().clone())
     # Return the evolved plan latent (at t_plan=1) so decode can condition on it exactly as
@@ -178,19 +266,38 @@ def _generate_samples_single_batch(
 
 
 @torch.no_grad()
-def _dlm_decode_batch(z: torch.Tensor, model: nn.Module, t_final_val,
-                      config, self_cond_cfg_scale: float, x_plan=None) -> torch.Tensor:
-    """Decode z -> tokens with the DLM decoder head.
+def _dlm_decode_logits_batch(z: torch.Tensor, model: nn.Module, t_final_val,
+                             config, self_cond_cfg_scale: float, x_plan=None,
+                             t_plan_decode_val: Optional[float] = None,
+                             plan_trajectory: Optional[str] = None,
+                             plan_mask: Optional[torch.Tensor] = None,
+                             attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    """Return decoder logits for a response latent using the generation decode path.
 
-    x_plan: the evolved plan latent (at t_plan=1) for a plan-enabled model, so the decoder
-    is conditioned on the plan exactly as during training. None for a vanilla model.
+    Normal ordered trajectories (diagonal / planning_first / lagging) decode with
+    t_plan=1 so the decoder sees a finished clean-plan condition. The strict null
+    ablation is different: it keeps a pure-noise plan at t_plan=0 through sampling
+    and decode, measuring an inference-time no-plan control rather than a path to
+    the (t_tok=1, t_plan=1) endpoint. None for a vanilla model.
     """
     batch_size = z.shape[0]
+    if attention_mask is not None:
+        if tuple(attention_mask.shape) != tuple(z.shape[:2]):
+            raise ValueError("attention_mask must have shape [B, response_width]")
+        if attention_mask.dtype != torch.bool:
+            if not bool(((attention_mask == 0) | (attention_mask == 1)).all()):
+                raise ValueError("attention_mask must be bool or contain only 0/1")
+            attention_mask = attention_mask.bool()
     if isinstance(t_final_val, torch.Tensor) and t_final_val.dim() == 0:
         t_final = torch.full((batch_size,), t_final_val.item(), dtype=z.dtype, device=z.device)
     else:
         t_final = torch.full((batch_size,), float(t_final_val), dtype=z.dtype, device=z.device)
-    t_plan = None if x_plan is None else torch.full((batch_size,), 1.0, dtype=z.dtype, device=z.device)
+    if x_plan is None:
+        t_plan = None
+    else:
+        if t_plan_decode_val is None:
+            t_plan_decode_val = 0.0 if plan_trajectory == "null" else 1.0
+        t_plan = torch.full((batch_size,), float(t_plan_decode_val), dtype=z.dtype, device=z.device)
     sc_batch = (
         torch.full((batch_size,), float(self_cond_cfg_scale), dtype=z.dtype, device=z.device)
         if config.num_self_cond_cfg_tokens > 0 else None
@@ -200,11 +307,30 @@ def _dlm_decode_batch(z: torch.Tensor, model: nn.Module, t_final_val,
     with torch.amp.autocast('cuda', dtype=torch.bfloat16, enabled=use_bf16):
         _, decoder_logits, _ = model(
             z_input, t_final, deterministic=True,
+            attention_mask=attention_mask,
             self_cond_cfg_scale=sc_batch,
             decoder_step_active=True,
             x_plan=x_plan, t_plan=t_plan,
+            plan_mask=plan_mask,
         )
-    return decoder_logits.argmax(dim=-1)
+    return decoder_logits
+
+
+@torch.no_grad()
+def _dlm_decode_batch(z: torch.Tensor, model: nn.Module, t_final_val,
+                      config, self_cond_cfg_scale: float, x_plan=None,
+                      t_plan_decode_val: Optional[float] = None,
+                      plan_trajectory: Optional[str] = None,
+                      plan_mask: Optional[torch.Tensor] = None,
+                      attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    """Decode z -> token IDs with the unchanged DLM decoder path."""
+    logits=_dlm_decode_logits_batch(
+        z=z,model=model,t_final_val=t_final_val,config=config,
+        self_cond_cfg_scale=self_cond_cfg_scale,x_plan=x_plan,
+        t_plan_decode_val=t_plan_decode_val,plan_trajectory=plan_trajectory,
+        plan_mask=plan_mask,attention_mask=attention_mask,
+    )
+    return logits.argmax(dim=-1)
 
 
 def _build_run_name(sampling_method, num_sampling_steps, cfg_scale, self_cond_cfg_scale,
