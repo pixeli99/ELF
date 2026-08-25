@@ -23,7 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from utils.train_utils import TrainState, ema_update, unwrap_model
-from utils.encoder_utils import encode_text
+from utils.encoder_utils import encode_x0
 from utils.loss_utils import token_cross_entropy, token_feature_mse
 from utils.plan_stream import build_plan_stream, plan_loss, resolve_group
 from utils.sampling_utils import (
@@ -106,13 +106,15 @@ def train_step(
         block_mask = (1 - cond_mask).unsqueeze(-1) * cond_mask.unsqueeze(1)
         encoder_attention_mask = encoder_attention_mask * (1 - drop * block_mask)
 
-    x0 = encode_text(
+    x0 = encode_x0(
         input_ids=input_ids,
         attention_mask=encoder_attention_mask,
         encoder=encoder,
         latent_mean=latent_mean,
         latent_std=latent_std,
         use_bf16=use_bf16,
+        cond_mask=cond_seq_mask,
+        drop_condition=label_drop_mask if config.label_drop_prob > 0 else None,
     ).to(dtype)
 
     batch_size, seq_length = x0.shape[0], x0.shape[1]

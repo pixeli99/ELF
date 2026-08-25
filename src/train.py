@@ -48,6 +48,8 @@ from utils.data_utils import (
     FormalStageBPairedDataset, FormalStageBCollator, FormalStageBScheduleDataset,
 )
 from utils.encoder_utils import encode_text, encode_thinking_x0
+from utils.conditional_data import (ConditionalPairedDataset, ConditionalSchedule,
+                                    get_conditional_dataloader)
 from utils.plan_stream import assert_group_protocol, compress_thinking_to_slots
 from utils.sampling_utils import frozen_pool_plan_target
 from utils.plan_utils import build_thinking_plan_target
@@ -131,6 +133,7 @@ def should_run_validation(config, current_epoch: int) -> bool:
         _is_eval_epoch(config, current_epoch)
         and getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1"
         and not getattr(config, "formal_stage_b_manifest", None)
+        and not getattr(config, "conditional_train_manifest", None)
     )
 
 
@@ -405,7 +408,21 @@ def run_training(config, *, force_cpu: bool = False):
                 raise ValueError("thinking_mlp_4to1 requires max_plan_slots")
             if config.num_plan_slots != config.max_plan_slots:
                 raise ValueError("num_plan_slots must equal max_plan_slots for Stage-B")
-        if config.formal_stage_b_manifest:
+        if config.conditional_train_manifest:
+            paired = ConditionalPairedDataset(
+                config.conditional_train_manifest,
+                expected_sha256=config.conditional_train_manifest_sha256,
+                verify_shards=bool(config.conditional_verify_shards),
+            )
+            rows = int(config.conditional_rows or len(paired))
+            train_dataset = ConditionalSchedule(
+                paired, rows=rows, master_seed=int(config.conditional_master_seed),
+            )
+            eval_dataset = None
+            log_for_0(f"Conditional Stage-B: pool={len(paired)} schedule={len(train_dataset)} "
+                      f"seed={config.conditional_master_seed}")
+            log_for_0(f"Schedule fingerprint: {train_dataset.fingerprint()}")
+        elif config.formal_stage_b_manifest:
             if (config.formal_stage_b_manifest_sha256
                     and _sha256_file(config.formal_stage_b_manifest)
                     != config.formal_stage_b_manifest_sha256):
@@ -514,7 +531,8 @@ def run_training(config, *, force_cpu: bool = False):
             model, config.init_from, strict=False, prefer_ema=True,
         )
         if getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1" and group_mode != "vanilla":
-            if config.formal_stage_b_manifest and config.num_plan_slots > 0 and config.num_plan_slots != 16:
+            stage_b = config.formal_stage_b_manifest or config.conditional_train_manifest
+            if stage_b and config.num_plan_slots > 0 and config.num_plan_slots != 16:
                 source = torch.load(config.init_from, map_location="cpu", weights_only=False)
                 source_state = source.get("ema_params1") or source.get("params")
                 old_slots = source_state.get("plan_slot_embed")
@@ -540,8 +558,8 @@ def run_training(config, *, force_cpu: bool = False):
             )
 
     if config.thinking_whitener_artifact and group_mode in ("ordered", "diagonal"):
-        if not config.formal_stage_b_manifest:
-            raise ValueError("precomputed thinking whitener requires formal_stage_b_manifest")
+        if not (config.formal_stage_b_manifest or config.conditional_train_manifest):
+            raise ValueError("precomputed thinking whitener requires a Stage-B manifest")
         whitening_manifest = os.path.join(
             os.path.dirname(config.thinking_whitener_artifact), "manifest.json",
         )
@@ -578,8 +596,8 @@ def run_training(config, *, force_cpu: bool = False):
         config.global_batch_size = total_batch_size
     else:
         raise ValueError("Either global_batch_size or batch_size must be specified")
-    if config.formal_stage_b_manifest and local_batch_size != 1:
-        raise ValueError("formal Stage-B deterministic DDP requires batch_size=1 per device")
+    if (config.formal_stage_b_manifest or config.conditional_train_manifest) and local_batch_size != 1:
+        raise ValueError("schedule-seeded Stage-B requires batch_size=1 per device")
 
     steps_per_epoch = len(train_dataset) // total_batch_size
     num_train_steps = steps_per_epoch * config.epochs
@@ -702,21 +720,31 @@ def run_training(config, *, force_cpu: bool = False):
         log_for_0(f"Config saved to {config_path}")
 
     if getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1":
-        if config.formal_stage_b_manifest:
+        if config.formal_stage_b_manifest or config.conditional_train_manifest:
+            if config.conditional_train_manifest:
+                train_dataloader, _ = get_conditional_dataloader(
+                    train_dataset, tokenizer, config, batch_size=local_batch_size,
+                    num_workers=config.num_workers, distributed=False,
+                )
+                validation_dataloader = None
+                return_conditional = True
+            else:
+                return_conditional = False
             collator = FormalStageBCollator(pad_token_id, config.max_length)
             if config.formal_stage_b_schedule and world != 1:
                 raise ValueError("common schedule baselines require independent single-GPU processes")
-            sampler = (torch.utils.data.SequentialSampler(train_dataset)
-                       if config.formal_stage_b_schedule else
-                       torch.utils.data.distributed.DistributedSampler(
-                           train_dataset, num_replicas=world, rank=rank, shuffle=True,
-                           seed=config.seed, drop_last=True))
-            train_dataloader = torch.utils.data.DataLoader(
-                train_dataset, batch_size=local_batch_size, sampler=sampler,
-                num_workers=config.num_workers, drop_last=True, collate_fn=collator,
-                pin_memory=True, persistent_workers=config.num_workers > 0,
-            )
-            validation_dataloader = None
+            if not return_conditional:
+                sampler = (torch.utils.data.SequentialSampler(train_dataset)
+                           if config.formal_stage_b_schedule else
+                           torch.utils.data.distributed.DistributedSampler(
+                               train_dataset, num_replicas=world, rank=rank, shuffle=True,
+                               seed=config.seed, drop_last=True))
+                train_dataloader = torch.utils.data.DataLoader(
+                    train_dataset, batch_size=local_batch_size, sampler=sampler,
+                    num_workers=config.num_workers, drop_last=True, collate_fn=collator,
+                    pin_memory=True, persistent_workers=config.num_workers > 0,
+                )
+                validation_dataloader = None
         else:
             train_dataloader = get_thinking_dataloader(
                 train_dataset, tokenizer, batch_size=local_batch_size,
@@ -809,8 +837,9 @@ def run_training(config, *, force_cpu: bool = False):
             # Skip already-processed batches when resuming mid-epoch
             if epoch == start_epoch and step_in_epoch < steps_to_skip_in_epoch:
                 continue
-            if config.formal_stage_b_manifest:
-                seed = _sample_seed(config.seed, list(batch.get("sample_id", [])), epoch)
+            if config.formal_stage_b_manifest or config.conditional_train_manifest:
+                identities = list(batch.get("sample_id") or batch.get("example_id") or [])
+                seed = _sample_seed(config.seed, identities, epoch)
                 torch.manual_seed(seed)
                 g.manual_seed(seed)
                 if device.type == "cuda":

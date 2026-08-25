@@ -81,6 +81,16 @@ class Config:
     formal_stage_b_manifest_sha256: str = None
     formal_stage_b_schedule: str = None
     formal_stage_b_schedule_sha256: str = None
+    # --- conditional Stage-B (prompt + thinking plan + response) ---
+    # The prompt shares the `max_length` window with the response, so
+    # condition_max_tokens is the guarantee that a response always has room:
+    # with 1024 / 2048 the package's longest response (1006 tokens) always fits.
+    conditional_train_manifest: str = None
+    conditional_train_manifest_sha256: str = None
+    conditional_rows: int = None       # schedule length; None uses the whole package
+    conditional_master_seed: int = 42  # with the row count, this IS the schedule
+    conditional_verify_shards: bool = True
+    condition_max_tokens: int = 1024
     group_mode: str = "ordered"  # ordered | diagonal | register | vanilla
     frozen_thinking_encoder: str = None
     thinking_whitener_artifact: str = None

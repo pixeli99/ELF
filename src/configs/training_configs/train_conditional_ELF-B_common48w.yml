@@ -1,0 +1,79 @@
+# Conditional Stage-B base: instruction + variable-K thinking plan + response.
+#
+# The prompt shares the sequence window with the response, so max_length and
+# condition_max_tokens are a pair: 1024 + 2048 guarantees a response is never
+# truncated, because the package's longest response is 1006 tokens. Measured
+# cost of the wider window at K~124: 1.40 s/optimizer-step and 2.6 GiB, against
+# 1.03 s and 2.0 GiB at 1024.
+conditional_train_manifest: data/conditional_v1/conditional_train_manifest.json
+conditional_train_manifest_sha256: 200a24b6704b3f8028dec0c991e2e31b90e2e8f49c3b2012714a967189472df3
+conditional_rows: 80000          # same budget as the unconditional protocol
+conditional_master_seed: 42      # with conditional_rows, this IS the schedule
+conditional_verify_shards: true
+max_length: 2048
+condition_max_tokens: 1024
+encoder_model_name: t5-small
+tokenizer_name: t5-small
+latent_mean: 0.0
+latent_std: 0.2
+model: ELF-B
+bottleneck_dim: 128
+num_time_tokens: 4
+num_self_cond_cfg_tokens: 4
+num_model_mode_tokens: 4
+plan_source: thinking_mlp_4to1
+plan_resampler: frozen_pool
+frozen_thinking_encoder: artifacts/stage_a/frozen_encoder_v1.pt
+thinking_whitener_artifact: artifacts/stage_a/whitener_stageb_v1.pt
+frozen_stage_a_checkpoint_sha256: 5c614014be72571bfa9acdfec27dde9f225c57056ea108fa9c9a72ea3bb3d457
+frozen_encoder_sha256: 08758ef49a7394fe318461f0b1df68b1b57b117afa05d5c1fe91c9fa1c8339da
+whitening_manifest_sha256: 0f523ddda8b3853df5dd8b3f970ea6b2216985b50b9b53d6cf7d351895796964
+num_plan_slots: 255
+max_plan_slots: 255
+num_plan_time_tokens: 4
+plan_loss_weight: 1.0
+plan_time_schedule: uniform
+plan_done_frac: 0.15
+plan_diag_frac: 0.0
+plan_whiten: zscore
+plan_whiten_batches: 0
+plan_register_only: false
+plan_response_attention: bidirectional
+denoiser_p_mean: -1.5
+denoiser_p_std: 0.8
+denoiser_noise_scale: 2.0
+t_eps: 0.05
+time_schedule: logit_normal
+decoder_prob: 0.2
+decoder_noise_scale: 5.0
+decoder_p_mean: 0.8
+decoder_p_std: 0.8
+self_cond_prob: 0.5
+init_from: outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592
+resume: null
+epochs: 1
+max_optimizer_steps: 10000
+global_batch_size: 1
+grad_accum_steps: 8
+blr: 0.001
+weight_decay: 0.0
+warmup_epochs: 0.5
+warmup_steps: -1
+warmup_optimizer_steps: 9508
+optimizer: muon
+ema_decay1: 0.9999
+gradient_checkpointing: true
+use_compile: false
+lr_schedule: constant
+sampling_configs_path: null
+online_eval: false
+log_freq: 10
+save_freq: 0
+save_optimizer_steps: [1000, 2000, 5000, 10000]
+eval_freq: 0
+output_dir: outputs/elf_b_conditional_common48w_ordered_10k_v1
+hf_repo_id: null
+use_wandb: false
+seed: 42
+num_workers: 2
+use_bf16: true
