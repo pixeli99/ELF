@@ -82,10 +82,13 @@ class ConditionalHandoffTests(unittest.TestCase):
         runtime = (ROOT / "src/utils/stage_b_eval_runtime.py").read_text()
         helper = (ROOT / "src/utils/stage_b_oracle_content_probe.py").read_text()
         self.assertIn('checkpoint["ema_params1"]', runtime)
-        self.assertIn("build_thinking_plan_target", runtime)
+        self.assertIn("build_whitened_thinking_plan", runtime)
         self.assertIn("ThinkingMLPEncoder", runtime)
-        self.assertIn("apply_plan_whitening", runtime)
         self.assertNotIn("build_plan_target", runtime)
+        # Evaluation shares the training plan builder, so whitening cannot drift.
+        shared = (ROOT / "src/utils/plan_stream.py").read_text()
+        self.assertIn("apply_plan_whitening", shared)
+        self.assertIn("encode_thinking_x0", shared)
         self.assertNotIn("plan_probes", runtime + helper)
         self.assertNotIn("consistency", helper)
 

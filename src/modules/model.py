@@ -353,11 +353,6 @@ class ELF(nn.Module):
         if plan_enabled:
             x = torch.cat([plan_hidden_in, x], dim=1)
             plan_offset = runtime_plan_slots
-            if attention_mask is not None:
-                attention_mask = torch.cat([
-                    plan_mask.to(dtype=attention_mask.dtype, device=attention_mask.device),
-                    attention_mask,
-                ], dim=1)
 
         # Prepend learnable model-mode tokens (gated by decoder_step_active).
         # decoder_step_active may be None / Python bool / (B,) tensor — the last
@@ -374,7 +369,7 @@ class ELF(nn.Module):
             mode_tokens = mode_tokens * active_gate
             x = torch.cat([mode_tokens, x], dim=1)
             model_mode_offset = self.num_model_mode_tokens
-            if attention_mask is not None:
+            if attention_mask is not None and not plan_enabled:
                 mode_mask = torch.ones((B, self.num_model_mode_tokens),
                                        dtype=attention_mask.dtype, device=attention_mask.device)
                 attention_mask = torch.cat([mode_mask, attention_mask], dim=1)
@@ -384,12 +379,14 @@ class ELF(nn.Module):
             prefix_tokens = torch.cat(context_prefix_tokens, dim=1)
             prefix_len = prefix_tokens.shape[1]
             x = torch.cat([prefix_tokens, x], dim=1)
-            if attention_mask is not None:
+            if attention_mask is not None and not plan_enabled:
                 prefix_mask = torch.ones((B, prefix_len),
                                          dtype=attention_mask.dtype, device=attention_mask.device)
                 attention_mask = torch.cat([prefix_mask, attention_mask], dim=1)
 
         if plan_enabled:
+            # Built from scratch over the full [prefix, mode, plan, response] layout,
+            # so the running concatenation above is skipped rather than discarded.
             attention_mask = build_plan_response_attention_mask(
                 token_valid=response_attention_mask,
                 plan_valid=plan_mask,

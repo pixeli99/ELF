@@ -7,7 +7,8 @@ from modules.model import ELF_models
 from modules.t5_encoder import get_encoder
 from modules.thinking_resampler import ThinkingMLPConfig, ThinkingMLPEncoder, freeze_module
 from utils.checkpoint_utils import find_latest_checkpoint
-from utils.plan_utils import apply_plan_whitening, build_plan_response_attention_mask, build_thinking_plan_target
+from utils.plan_stream import build_whitened_thinking_plan
+from utils.plan_utils import build_plan_response_attention_mask
 from utils.stage_b_oracle_content_probe import oracle_model_input, read_pointer
 
 logger = logging.getLogger(__name__)
@@ -73,12 +74,8 @@ def build_clean_thinking_plan(meta, which, tokenizer, t5, encoder, model, config
     mask = ids.ne(tokenizer.pad_token_id)
     if ids.shape[1] > 1024:
         raise ValueError(f'oracle thinking exceeds 1024: {item["sample_id"]}')
-    use_bf16 = bool(config.use_bf16) and device.type == "cuda"
-    with torch.amp.autocast("cuda", dtype=torch.bfloat16, enabled=use_bf16):
-        latent = t5(input_ids=ids, attention_mask=mask, deterministic=True).float()
-    raw, plan_mask = build_thinking_plan_target(
-        latent, mask, encoder, max_plan_slots=config.max_plan_slots)
-    plan = apply_plan_whitening(model, raw, plan_mask).float()
+    plan, plan_mask = build_whitened_thinking_plan(ids, mask, t5, encoder, model, config)
+    plan = plan.float()
     expected = int(meta["recipient_K"] if which == "recipient" else meta["donor_K"])
     if int(plan_mask.sum()) != expected:
         raise ValueError("oracle plan K mismatch")

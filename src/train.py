@@ -47,7 +47,8 @@ from utils.data_utils import (
     load_thinking_jsonl_splits, get_pad_token_id,
     FormalStageBPairedDataset, FormalStageBCollator, FormalStageBScheduleDataset,
 )
-from utils.encoder_utils import encode_text
+from utils.encoder_utils import encode_text, encode_thinking_x0
+from utils.plan_stream import assert_group_protocol, compress_thinking_to_slots
 from utils.sampling_utils import frozen_pool_plan_target
 from utils.plan_utils import build_thinking_plan_target
 from train_step import train_step
@@ -299,14 +300,10 @@ def _fit_thinking_plan_whitener(
     for batch_index, batch in enumerate(loader):
         if batch_index >= config.plan_whiten_batches:
             break
-        token_ids = batch["plan_input_ids"].to(device).long()
-        token_mask = batch["plan_attention_mask"].to(device).bool()
-        token_latents = encoder(
-            input_ids=token_ids, attention_mask=token_mask, deterministic=True,
-        ).float()
-        raw_plan, plan_mask = build_thinking_plan_target(
-            token_latents, token_mask, plan_encoder,
-            max_plan_slots=config.max_plan_slots,
+        raw_plan, plan_mask = compress_thinking_to_slots(
+            batch["plan_input_ids"].to(device).long(),
+            batch["plan_attention_mask"].to(device).bool(),
+            encoder, plan_encoder, config,
         )
         valid = raw_plan[plan_mask].double()
         n += valid.shape[0]
@@ -365,15 +362,8 @@ def run_training(config, *, force_cpu: bool = False):
     if config.resume and config.init_from:
         raise ValueError("Config cannot set both resume and init_from: resume restores training state; "
                          "init_from only warm-starts model weights.")
-    group_mode=getattr(config,"group_mode","ordered")
-    if group_mode not in ("ordered","diagonal","register","vanilla"):
-        raise ValueError(f"invalid group_mode: {group_mode}")
-    expected={"ordered":(False,.15,0.,1.),"diagonal":(False,0.,1.,1.),"register":(True,0.,0.,0.)}
-    if group_mode in expected:
-        actual=(bool(config.plan_register_only),float(config.plan_done_frac),float(config.plan_diag_frac),float(config.plan_loss_weight))
-        if actual!=expected[group_mode]:raise ValueError(f"group_mode={group_mode} protocol mismatch: {actual}")
-    if group_mode=="vanilla" and (config.num_plan_slots!=0 or config.max_plan_slots!=0):
-        raise ValueError("vanilla requires num_plan_slots=max_plan_slots=0")
+    group = assert_group_protocol(config)
+    group_mode = group.mode
 
     if config.use_wandb and rank == 0 and wandb is not None:
         wandb_config = {k: getattr(config, k) for k in dir(config) if not k.startswith("_")}

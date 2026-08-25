@@ -46,13 +46,14 @@ Each repository file covered by this handoff has one row. “Main chain” means
 | `src/modules/thinking_resampler.py` | Nonlinear adjacent-4 MLP | grouped T5 latents | plan slots/reconstruction | Stage A/plan build | Yes | No |
 | `src/utils/checkpoint_utils.py` | Checkpoint resolution/save/load helpers | run paths/state | restored state | Train/eval | Yes | No |
 | `src/utils/data_utils.py` | Upstream conditional plus formal paired loaders | datasets/manifests | token/mask batches | Train/eval | Yes | Preserve `condition_input_ids` and add paired thinking |
-| `src/utils/encoder_utils.py` | Frozen-T5 encoding and condition-mask construction | IDs/lengths | latent/masks | Train/eval | Shared | Reuse clean-prefix masks |
+| `src/utils/encoder_utils.py` | Frozen-T5 encoding (response and thinking, both ELF-normalized) and condition-mask construction | IDs/lengths | latent/masks | Train/eval | Shared | Reuse clean-prefix masks |
 | `src/utils/formal_thinking_mlp.py` | Stage-A dataset/model/grouping helpers | thinking records | MLP tensors | Stage A | Yes | No |
 | `src/utils/generation_utils.py` | Solver-facing token/plan generation and decode | states/clocks/conditions | generated latent/IDs | Evaluation | Yes | Carry identical condition across groups |
 | `src/utils/logging_utils.py` | Rank-aware logging | messages/rank | logs | Runtime | Shared | No |
 | `src/utils/loss_utils.py` | Masked sum/count loss reductions | targets/predictions/masks | losses | Training | Yes | Preserve denominators |
 | `src/utils/metrics_utils.py` | BLEU, ROUGE, GPT-2 NLL/Gen-PPL and token-frequency entropy | hypotheses/references | metrics | Evaluation | Shared | Add answer accuracy outside this module |
 | `src/utils/muon_utils.py` | Muon/Adam optimizer support | model parameters | optimizer state | Training | Yes | No |
+| `src/utils/plan_stream.py` | Four-group table, the single thinking->plan target path, plan clock and plan loss | batch/config/frozen stack | `PlanStream` tensors | Every update, formal evaluators | Yes | Add the instruction condition alongside the plan |
 | `src/utils/plan_utils.py` | Thinking-plan grouping, whitening, clocks and masks | latents/masks | plan targets | Stage A/B | Yes | Keep gold thinking train-only |
 | `src/utils/sampling_utils.py` | ODE/SDE steps and clean-condition restoration | states/time grid/condition | updated states | Generation | Yes | Reuse existing conditional restoration |
 | `src/utils/stage_b_common80k_generation.py` | Condition matrix, deterministic noise and truth gates | shape metadata | arm protocol | Formal generation | Yes | Add instruction identity gate |
@@ -99,6 +100,8 @@ Each repository file covered by this handoff has one row. “Main chain” means
 | `tests/test_stage_b_common80k_generation.py` | Fourteen-arm NFE/noise/mask/resume gates | mock shapes | assertions | CPU CI | Yes | Add instruction lock |
 | `tests/test_stage_b_common_schedule.py` | Deterministic schedule and overlay checks | mock metadata | assertions | CPU CI | Yes | Include instruction identity |
 | `tests/test_stage_b_oracle_serial.py` | Serial order/exact-K/freeze protocol | mock mapping | assertions | CPU CI | Yes | Keep gold thinking privileged |
+| `tests/test_plan_stream_contract.py` | The four-group contract and the group/config validators | synthetic thinking | assertions | CPU CI | Yes | Extend with the instruction condition |
+| `tests/test_plan_target_scale_and_diagonal.py` | Stage-A latent normalization and the diagonal clock invariant | synthetic thinking | assertions | CPU CI | Yes | No |
 | `tests/test_stage_b_thinking_plan.py` | Thinking target, whitening and runtime plan masks | synthetic thinking | assertions | CPU CI | Yes | No |
 
 ## Upstream conditional/legacy reference
@@ -123,6 +126,7 @@ The following files are retained unchanged to explain the inherited PyTorch impl
 
 ## Conditional modification map
 
+0. The thinking -> plan target has exactly one implementation, `plan_stream.compress_thinking_to_slots`, and it normalizes the frozen-T5 latents the way Stage A was fitted. Training, the whitener stats pass and every evaluator call it; do not open a fourth path.
 1. Audit and reuse `condition_input_ids`, condition masks, and the clean T5 prefix already implemented in `data_utils.py`, `encoder_utils.py`, `train_step.py`, `generation.py`, and `generation_utils.py`.
 2. Attach variable-K thinking plans to that conditional path; do not invent a second instruction encoder unless the inherited path is proven insufficient.
 3. Provide instruction/prompt at test time. Gold thinking constructs training plan targets only and must never enter test generation.

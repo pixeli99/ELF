@@ -40,6 +40,23 @@ def canonical_response_inputs(input_ids, sequence_length):
 
 
 @torch.no_grad()
+def encode_thinking_x0(input_ids, attention_mask, encoder, latent_mean, latent_std,
+                       use_bf16=True):
+    """Frozen-T5 thinking latents in the space the Stage-A stack was fitted on.
+
+    The 4-to-1 MLP (`tools/train_formal_thinking_mlp.py`) and its whitener
+    (`tools/compute_formal_thinking_whitener.py`) both consume ELF-normalized
+    latents, so every Stage-B caller must normalize before touching the frozen
+    encoder. Feeding raw T5 output shrinks the MLP input by 1/latent_std and
+    pushes the compressed slots off the manifold the decoder was trained on.
+    """
+    return encode_text(
+        input_ids=input_ids, attention_mask=attention_mask, encoder=encoder,
+        latent_mean=latent_mean, latent_std=latent_std, use_bf16=use_bf16,
+    ).float()
+
+
+@torch.no_grad()
 def encode_response_x0(input_ids, sequence_length, encoder, latent_mean, latent_std,
                        use_bf16=True, return_components=False):
     """Canonical runtime input_ids -> frozen-T5 response x0 path for probes."""

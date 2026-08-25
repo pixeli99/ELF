@@ -59,7 +59,7 @@ def build_thinking_plan_target(
     """Compress valid T5 thinking rows into a dynamically padded slot batch."""
     batch_slots = []
     lengths = []
-    embedding_dim = plan_token_latents.shape[-1]
+    embedding_dim = plan_token_latents.shape[-1]  # frozen-T5 width, the encoder's input
     for latents, token_mask in zip(plan_token_latents, plan_token_mask):
         valid = latents[token_mask.bool()]
         groups = (valid.shape[0] + 3) // 4
@@ -76,7 +76,8 @@ def build_thinking_plan_target(
         batch_slots.append(slots)
         lengths.append(groups)
     k_batch = max(lengths)
-    output = plan_token_latents.new_zeros((len(batch_slots), k_batch, embedding_dim))
+    slot_dim = batch_slots[0].shape[-1]  # not embedding_dim: the encoder may change width
+    output = plan_token_latents.new_zeros((len(batch_slots), k_batch, slot_dim))
     mask = torch.zeros((len(batch_slots), k_batch), dtype=torch.bool, device=output.device)
     for index, slots in enumerate(batch_slots):
         output[index, :slots.shape[0]] = slots
