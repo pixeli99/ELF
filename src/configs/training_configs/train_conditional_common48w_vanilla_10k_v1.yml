@@ -4,6 +4,7 @@ output_dir: outputs/elf_b_conditional_common48w_vanilla_10k_v1
 num_plan_slots: 0
 max_plan_slots: 0
 plan_whiten: none
+plan_target_dim: 0
 plan_register_only: false
 plan_done_frac: 0.0
 plan_diag_frac: 0.0

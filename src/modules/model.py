@@ -16,6 +16,7 @@ from modules.layers import (
 
 
 PLAN_RESPONSE_ATTENTION_MODES = ("bidirectional", "causal_bottleneck")
+PLAN_WHITEN_MODES = ("none", "zscore", "pca", "external")
 
 
 def build_plan_response_attention_mask(
@@ -176,7 +177,11 @@ class ELF(nn.Module):
         # text_encoder_dim for plan_whiten in {"none", "zscore"}, or plan_target_dim for "pca"
         # (whitened PCA projection of the pooled target — lower-dim, more abstract slots).
         self.plan_whiten = plan_whiten
-        if num_plan_slots > 0 and plan_whiten == "pca" and plan_target_dim > 0:
+        if (num_plan_slots > 0 and plan_target_dim > 0
+                and plan_whiten in ("pca", "external")):
+            # "external": the target maker (e.g. the frozen Plan-VAE) already
+            # produces standardized latents in its own space; the model carries
+            # no whitening buffers for it.
             self.plan_latent_dim = plan_target_dim
         else:
             self.plan_latent_dim = text_encoder_dim
@@ -195,13 +200,15 @@ class ELF(nn.Module):
             )
             # Frozen target-maker whitening stats, fit once before training (identity until then).
             # Persistent buffers: saved/restored with checkpoints, so resume/eval reuse the fit.
-            self.register_buffer("plan_target_mean", torch.zeros(text_encoder_dim))
-            if plan_whiten == "pca":
-                self.register_buffer("plan_target_proj",
-                                     torch.zeros(text_encoder_dim, self.plan_latent_dim))
-            else:
-                self.register_buffer("plan_target_std", torch.ones(text_encoder_dim))
-            self.register_buffer("plan_whiten_ready", torch.zeros((), dtype=torch.uint8))
+            # plan_whiten == "external" carries none: the external encoder owns its geometry.
+            if plan_whiten != "external":
+                self.register_buffer("plan_target_mean", torch.zeros(text_encoder_dim))
+                if plan_whiten == "pca":
+                    self.register_buffer("plan_target_proj",
+                                         torch.zeros(text_encoder_dim, self.plan_latent_dim))
+                else:
+                    self.register_buffer("plan_target_std", torch.ones(text_encoder_dim))
+                self.register_buffer("plan_whiten_ready", torch.zeros((), dtype=torch.uint8))
 
         head_dim = hidden_size // num_heads
         # Prefix + mode + plan tokens carry no rotary position; only real token positions do.
@@ -243,6 +250,10 @@ class ELF(nn.Module):
                           std: Optional[torch.Tensor] = None,
                           proj: Optional[torch.Tensor] = None) -> None:
         """Install frozen whitening stats for the plan target maker (fit once, then frozen)."""
+        if self.plan_whiten == "external":
+            raise RuntimeError(
+                "plan_whiten='external': the plan target arrives pre-standardized "
+                "(frozen Plan-VAE); the model owns no whitening buffers")
         self.plan_target_mean.copy_(mean.to(self.plan_target_mean))
         if self.plan_whiten == "pca":
             if proj is None:

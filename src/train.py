@@ -27,6 +27,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from modules.t5_encoder import get_encoder
+from modules.plan_vae import load_frozen_plan_vae
 from modules.thinking_resampler import (
     build_adjacent_mlp_encoder, freeze_module, ThinkingMLPConfig, ThinkingMLPEncoder,
 )
@@ -127,11 +128,16 @@ def _is_eval_epoch(config, current_epoch: int) -> bool:
     return config.eval_freq >= 1 and current_epoch % config.eval_freq == 0
 
 
+def uses_paired_thinking(config) -> bool:
+    """Stage-B sources whose data is paired thinking/response documents."""
+    return getattr(config, "plan_source", "frozen_pool") in ("thinking_mlp_4to1", "span_vae")
+
+
 def should_run_validation(config, current_epoch: int) -> bool:
     """Stage-B uses eval cadence for no-grad validation loss, not generation."""
     return (
         _is_eval_epoch(config, current_epoch)
-        and getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1"
+        and uses_paired_thinking(config)
         and not getattr(config, "formal_stage_b_manifest", None)
         and not getattr(config, "conditional_train_manifest", None)
     )
@@ -142,7 +148,7 @@ def should_run_generation(config, current_epoch: int) -> bool:
     return (
         _is_eval_epoch(config, current_epoch)
         and bool(getattr(config, "online_eval", False))
-        and getattr(config, "plan_source", "frozen_pool") != "thinking_mlp_4to1"
+        and not uses_paired_thinking(config)
     )
 
 
@@ -395,17 +401,17 @@ def run_training(config, *, force_cpu: bool = False):
 
     log_for_0("Loading tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name or config.encoder_model_name)
-    if getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1":
+    if uses_paired_thinking(config):
         # T5 uses relative positions and accepts these observed 1122-token thinking
         # trajectories; disable the tokenizer's legacy 512-token warning only.
         tokenizer.model_max_length = sys.maxsize
     pad_token_id = get_pad_token_id(tokenizer, config.pad_token)
     log_for_0(f"Using {'EOS' if config.pad_token == 'eos' else 'PAD'} token for padding: {pad_token_id}")
 
-    if getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1":
+    if uses_paired_thinking(config):
         if group_mode != "vanilla":
             if config.max_plan_slots is None:
-                raise ValueError("thinking_mlp_4to1 requires max_plan_slots")
+                raise ValueError("paired thinking Stage-B requires max_plan_slots")
             if config.num_plan_slots != config.max_plan_slots:
                 raise ValueError("num_plan_slots must equal max_plan_slots for Stage-B")
         if config.conditional_train_manifest:
@@ -457,7 +463,21 @@ def run_training(config, *, force_cpu: bool = False):
     log_for_0(f"Encoder d_model: {encoder_config.d_model}")
 
     plan_encoder = None
-    if (getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1"
+    if (getattr(config, "plan_source", "frozen_pool") == "span_vae"
+            and group_mode in ("ordered", "diagonal")):
+        if encoder_config.d_model != 512:
+            raise ValueError("span_vae requires t5-small width 512")
+        if not config.plan_vae_artifact:
+            raise ValueError("span_vae requires plan_vae_artifact")
+        plan_encoder, vae_meta = load_frozen_plan_vae(
+            config.plan_vae_artifact, device=device,
+            expected_sha256=config.plan_vae_artifact_sha256,
+        )
+        if int(vae_meta["k_max"]) != config.num_plan_slots                 or int(vae_meta["z_dim"]) != config.plan_target_dim:
+            raise ValueError("plan VAE artifact does not match num_plan_slots/plan_target_dim")
+        log_for_0(f"Loaded frozen Plan-VAE (beta={vae_meta['beta']}, "
+                  f"K={vae_meta['k_max']}, z={vae_meta['z_dim']}) from {config.plan_vae_artifact}")
+    elif (getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1"
             and group_mode in ("ordered", "diagonal")):
         if encoder_config.d_model != 512:
             raise ValueError("thinking_mlp_4to1 Stage-B requires t5-small width 512")
@@ -675,7 +695,7 @@ def run_training(config, *, force_cpu: bool = False):
     # in DDP every rank runs the pass on its own shard and the moments are all_reduced,
     # so all ranks install identical stats before the DDP broadcast.
     if (config.num_plan_slots > 0 and not config.plan_register_only
-            and config.plan_whiten != "none"
+            and config.plan_whiten not in ("none", "external")
             and int(state.model.plan_whiten_ready.item()) == 0):
         if getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1":
             if config.plan_whiten == "pca":
@@ -719,7 +739,7 @@ def run_training(config, *, force_cpu: bool = False):
             yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
         log_for_0(f"Config saved to {config_path}")
 
-    if getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1":
+    if uses_paired_thinking(config):
         if config.formal_stage_b_manifest or config.conditional_train_manifest:
             if config.conditional_train_manifest:
                 train_dataloader, _ = get_conditional_dataloader(

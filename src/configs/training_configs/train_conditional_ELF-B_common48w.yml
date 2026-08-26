@@ -21,21 +21,22 @@ bottleneck_dim: 128
 num_time_tokens: 4
 num_self_cond_cfg_tokens: 4
 num_model_mode_tokens: 4
-plan_source: thinking_mlp_4to1
+# Plan target: frozen Plan-VAE (span-anchored, generated-null dynamic budget).
+# The trailing slots of x0_plan are exact zeros -- the null code. plan_mask is
+# all-ones: plan length is generated at inference, never an input.
+plan_source: span_vae
 plan_resampler: frozen_pool
-frozen_thinking_encoder: artifacts/stage_a/frozen_encoder_v1.pt
-thinking_whitener_artifact: artifacts/stage_a/whitener_stageb_v1.pt
-frozen_stage_a_checkpoint_sha256: 5c614014be72571bfa9acdfec27dde9f225c57056ea108fa9c9a72ea3bb3d457
-frozen_encoder_sha256: 08758ef49a7394fe318461f0b1df68b1b57b117afa05d5c1fe91c9fa1c8339da
-whitening_manifest_sha256: 0f523ddda8b3853df5dd8b3f970ea6b2216985b50b9b53d6cf7d351895796964
-num_plan_slots: 255
-max_plan_slots: 255
+plan_vae_artifact: artifacts/plan_vae/plan_vae_v7_beta0.1.pt
+plan_vae_artifact_sha256: d2acbaa49f7db8612b16f0ca31e5b4abc926d118ded0437b9fecad99330cbbfd
+plan_target_dim: 128
+num_plan_slots: 64
+max_plan_slots: 64
 num_plan_time_tokens: 4
 plan_loss_weight: 1.0
 plan_time_schedule: uniform
 plan_done_frac: 0.15
 plan_diag_frac: 0.0
-plan_whiten: zscore
+plan_whiten: external
 plan_whiten_batches: 0
 plan_register_only: false
 plan_response_attention: bidirectional
@@ -49,7 +50,8 @@ decoder_noise_scale: 5.0
 decoder_p_mean: 0.8
 decoder_p_std: 0.8
 self_cond_prob: 0.5
-init_from: outputs/elf_b-owt-ordered-5b-4g/checkpoint_152592
+# Backbone warm start: our own dolma3 vanilla pretrain (pending); null trains from scratch.
+init_from: null
 resume: null
 epochs: 1
 max_optimizer_steps: 10000
@@ -71,7 +73,7 @@ log_freq: 10
 save_freq: 0
 save_optimizer_steps: [1000, 2000, 5000, 10000]
 eval_freq: 0
-output_dir: outputs/elf_b_conditional_common48w_ordered_10k_v1
+output_dir: outputs/elf_b_conditional_common48w_ordered_10k_v2
 hf_repo_id: null
 use_wandb: false
 seed: 42

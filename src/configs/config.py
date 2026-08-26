@@ -91,6 +91,9 @@ class Config:
     conditional_master_seed: int = 42  # with the row count, this IS the schedule
     conditional_verify_shards: bool = True
     condition_max_tokens: int = 1024
+    # --- frozen Plan-VAE (plan_source: span_vae) ---
+    plan_vae_artifact: str = None
+    plan_vae_artifact_sha256: str = None
     group_mode: str = "ordered"  # ordered | diagonal | register | vanilla
     frozen_thinking_encoder: str = None
     thinking_whitener_artifact: str = None

@@ -30,7 +30,7 @@ from utils.plan_utils import apply_plan_whitening, build_thinking_plan_target
 from utils.sampling_utils import add_noise, sample_timesteps
 
 GROUP_MODES = ("ordered", "diagonal", "register", "vanilla")
-PLAN_SOURCES = ("thinking_mlp_4to1", "frozen_pool")
+PLAN_SOURCES = ("span_vae", "thinking_mlp_4to1", "frozen_pool")
 THINKING_GROUP_SIZE = 4
 
 
@@ -122,6 +122,27 @@ def compress_thinking_to_slots(input_ids, token_mask, encoder, plan_encoder, con
     return build_thinking_plan_target(
         latents, token_mask, plan_encoder, max_plan_slots=max_plan_slots(config),
     )
+
+
+@torch.no_grad()
+def build_vae_plan_target(input_ids, token_mask, encoder, plan_vae, config):
+    """thinking token ids -> Plan-VAE posterior mean, trailing NULL slots as zeros.
+
+    The returned mask is ALL ONES on purpose: nulls are generated content, not
+    padding. The Stage-B model always runs the full K_MAX slots; at inference
+    the denoiser itself decides how many slots resolve to content and how many
+    to the zero null code -- the plan length is generated, never an input.
+    """
+    if plan_vae is None:
+        raise ValueError("span_vae requires a frozen plan_vae")
+    latents = encode_thinking_x0(
+        input_ids=input_ids, attention_mask=token_mask, encoder=encoder,
+        latent_mean=config.latent_mean, latent_std=config.latent_std,
+        use_bf16=bool(getattr(config, "use_bf16", True)) and input_ids.is_cuda,
+    )
+    mu, _, active = plan_vae.posterior(latents, token_mask.bool())
+    ones = torch.ones(mu.shape[:2], dtype=torch.bool, device=mu.device)
+    return mu, ones, active
 
 
 @torch.no_grad()
@@ -226,7 +247,16 @@ def build_plan_stream(
         return _register_stream(config, batch, model, t, plan_source, schedule_seed)
 
     device, dtype = t.device, t.dtype
-    if plan_source == "thinking_mlp_4to1":
+    if plan_source == "span_vae":
+        x0_plan, plan_mask, _ = build_vae_plan_target(
+            batch["plan_input_ids"].to(device, non_blocking=True).long(),
+            batch["plan_attention_mask"].to(device, non_blocking=True).bool(),
+            encoder, plan_encoder, config,
+        )
+        x0_plan = x0_plan.to(dtype)
+        if bool(batch.get("diagnostic_zero_plan_content", False)):
+            x0_plan = torch.zeros_like(x0_plan)
+    elif plan_source == "thinking_mlp_4to1":
         x0_plan, plan_mask = build_whitened_thinking_plan(
             batch["plan_input_ids"].to(device, non_blocking=True).long(),
             batch["plan_attention_mask"].to(device, non_blocking=True).bool(),
