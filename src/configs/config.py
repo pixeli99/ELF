@@ -91,6 +91,10 @@ class Config:
     conditional_master_seed: int = 42  # with the row count, this IS the schedule
     conditional_verify_shards: bool = True
     condition_max_tokens: int = 1024
+    # --- Dolma backbone pretraining (streaming jsonl.zst) ---
+    dolma_data_dir: str = None
+    dolma_min_tokens: int = 64
+    dolma_samples_per_epoch: int = 256000
     # --- frozen Plan-VAE (plan_source: span_vae) ---
     plan_vae_artifact: str = None
     plan_vae_artifact_sha256: str = None

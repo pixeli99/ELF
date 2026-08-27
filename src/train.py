@@ -49,6 +49,7 @@ from utils.data_utils import (
     FormalStageBPairedDataset, FormalStageBCollator, FormalStageBScheduleDataset,
 )
 from utils.encoder_utils import encode_text, encode_thinking_x0
+from utils.dolma_data import DolmaStreamDataset, get_dolma_dataloader
 from utils.conditional_data import (ConditionalPairedDataset, ConditionalSchedule,
                                     get_conditional_dataloader)
 from utils.plan_stream import assert_group_protocol, compress_thinking_to_slots
@@ -452,6 +453,14 @@ def run_training(config, *, force_cpu: bool = False):
                 f"Thinking documents: train={len(train_dataset)} val={len(eval_dataset)} "
                 f"test={len(document_splits['test'])}"
             )
+    elif config.dolma_data_dir:
+        train_dataset = DolmaStreamDataset(
+            config.dolma_data_dir, tokenizer, max_length=config.max_length,
+            min_tokens=config.dolma_min_tokens,
+            samples_per_epoch=config.dolma_samples_per_epoch,
+            seed=config.seed, rank=rank, world=world,
+        )
+        eval_dataset = None
     else:
         train_dataset, eval_dataset = load_dataset(config)
 
@@ -781,6 +790,12 @@ def run_training(config, *, force_cpu: bool = False):
                 distributed=False,
                 plan_add_special_tokens=config.thinking_plan_add_special_tokens,
             )
+    elif config.dolma_data_dir:
+        validation_dataloader = None
+        train_dataloader = get_dolma_dataloader(
+            train_dataset, pad_token_id, batch_size=local_batch_size,
+            max_length=config.max_length, num_workers=config.num_workers,
+        )
     else:
         validation_dataloader = None
         train_dataloader = get_dataloader(
