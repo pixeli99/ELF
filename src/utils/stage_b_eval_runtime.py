@@ -8,7 +8,7 @@ from modules.t5_encoder import get_encoder
 from modules.thinking_resampler import ThinkingMLPConfig, ThinkingMLPEncoder, freeze_module
 from utils.checkpoint_utils import find_latest_checkpoint
 from utils.plan_stream import build_whitened_thinking_plan
-from utils.plan_utils import build_plan_response_attention_mask
+from modules.model import build_plan_response_attention_mask
 from utils.stage_b_oracle_content_probe import oracle_model_input, read_pointer
 
 logger = logging.getLogger(__name__)
