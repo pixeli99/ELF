@@ -149,13 +149,20 @@ class ConditionalCollator:
     """[prompt | response] in one window, plus the gold-thinking plan tokens."""
 
     def __init__(self, tokenizer, max_length: int = 2048, condition_max_tokens: int = 1024,
-                 max_plan_slots: int = 255, pad_token_id: Optional[int] = None):
+                 max_plan_slots: int = 255, pad_token_id: Optional[int] = None,
+                 plan_token_capacity: Optional[int] = None):
         if condition_max_tokens >= max_length:
             raise ValueError("condition_max_tokens must leave room for a response")
         self.tokenizer = tokenizer
         self.max_length = int(max_length)
         self.condition_max_tokens = int(condition_max_tokens)
         self.max_plan_slots = int(max_plan_slots)
+        # How many gold-thinking tokens the plan target may consume. The legacy
+        # 4-to-1 MLP path derives it from the slot count; the span-VAE path must
+        # pass it explicitly (SPAN * K_MAX = 1024), because 4 * 64 = 256 silently
+        # cut every thinking to its first quarter and capped the budget at 16 slots.
+        self.plan_token_capacity = int(plan_token_capacity if plan_token_capacity is not None
+                                       else PLAN_GROUP_SIZE * self.max_plan_slots)
         self.pad_token_id = int(pad_token_id if pad_token_id is not None
                                 else tokenizer.pad_token_id)
 
@@ -177,7 +184,7 @@ class ConditionalCollator:
         batch = len(rows)
         prompts, responses, thinkings = self._encode(rows)
         plan_width = max(1, max(len(t) for t in thinkings))
-        plan_width = min(plan_width, PLAN_GROUP_SIZE * self.max_plan_slots)
+        plan_width = min(plan_width, self.plan_token_capacity)
 
         input_ids = np.full((batch, self.max_length), self.pad_token_id, dtype=np.int64)
         plan_ids = np.full((batch, plan_width), self.pad_token_id, dtype=np.int64)
@@ -237,13 +244,26 @@ def plan_slots_for(token_count: int) -> int:
     return math.ceil(token_count / PLAN_GROUP_SIZE)
 
 
+def plan_token_capacity_for(config) -> int:
+    """Gold-thinking tokens the configured plan source can absorb."""
+    slots = int(getattr(config, "max_plan_slots", None) or config.num_plan_slots or 255)
+    if getattr(config, "plan_source", None) == "span_vae":
+        from modules.plan_vae import K_MAX, SPAN
+        if slots != K_MAX:
+            raise ValueError(f"span_vae plan source needs max_plan_slots == {K_MAX}, got {slots}")
+        return SPAN * K_MAX
+    return PLAN_GROUP_SIZE * slots
+
+
 def get_conditional_dataloader(dataset, tokenizer, config, batch_size: int,
                                num_workers: int = 0, distributed: bool = False):
     """Sequential loader over a fixed schedule: the order IS the experiment."""
+    capacity = plan_token_capacity_for(config)
     collator = ConditionalCollator(
         tokenizer, max_length=config.max_length,
         condition_max_tokens=config.condition_max_tokens,
         max_plan_slots=int(getattr(config, "max_plan_slots", None) or config.num_plan_slots or 255),
+        plan_token_capacity=capacity,
     )
     sampler = None
     if distributed:
@@ -254,7 +274,7 @@ def get_conditional_dataloader(dataset, tokenizer, config, batch_size: int,
         persistent_workers=num_workers > 0,
     )
     log_for_0(f"Conditional loader: {len(dataset)} rows, max_length={config.max_length}, "
-              f"condition_max_tokens={config.condition_max_tokens}")
+              f"condition_max_tokens={config.condition_max_tokens}, plan_token_capacity={capacity}")
     return loader, collator
 
 

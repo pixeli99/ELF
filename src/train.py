@@ -842,6 +842,10 @@ def run_training(config, *, force_cpu: bool = False):
     # checkpoint to avoid re-saving immediately after resume.
     last_save_epoch = resume_epoch_fractional if resume_step > 0 else float(start_epoch)
 
+    _TRUNCATION_KEYS = ("prompt_truncated", "response_truncated", "thinking_truncated")
+
+    truncation_totals = {key: 0.0 for key in _TRUNCATION_KEYS}
+
     for epoch in range(start_epoch, config.epochs):
         log_for_0(f"\nEpoch {epoch + 1}/{config.epochs}")
 
@@ -1042,6 +1046,12 @@ def run_training(config, *, force_cpu: bool = False):
                 avg_loss, avg_l2, avg_ce, avg_plan, avg_grad, response_tokens, plan_slots, plan_capacity = (
                     float(x) for x in stacked.tolist()
                 )
+                # Running collator truncation totals (conditional Stage-B only; zero
+                # elsewhere). A capped plan target once hid here unlogged for a full run.
+                for key in _TRUNCATION_KEYS:
+                    truncation_totals[key] += sum(
+                        float(m[key]) for m in train_metrics if key in m)
+                truncation_str = "/".join(str(int(truncation_totals[k])) for k in _TRUNCATION_KEYS)
                 now = time.time()
                 steps_per_sec = (global_step - last_log_step) / max(now - last_log_time, 1e-8)
                 current_lr = state.optimizer.param_groups[0]["lr"]
@@ -1053,6 +1063,7 @@ def run_training(config, *, force_cpu: bool = False):
                     "grad": f"{avg_grad:.4f}", "response_tokens": f"{int(response_tokens)}",
                     "plan_slots": f"{int(plan_slots)}",
                     "plan_padding": f"{1.0 - plan_slots / max(plan_capacity, 1.0):.4f}",
+                    "cut_p/r/t": truncation_str,
                     "sps": f"{steps_per_sec:.1f}", "lr": f"{current_lr:.2e}",
                 }
                 log_for_0(postfix_dict)
@@ -1065,6 +1076,7 @@ def run_training(config, *, force_cpu: bool = False):
                         f"grad={avg_grad:.4f}, response_tokens={int(response_tokens)}, "
                         f"plan_slots={int(plan_slots)}, plan_padding="
                         f"{1.0 - plan_slots / max(plan_capacity, 1.0):.4f}, "
+                        f"truncated(prompt/response/thinking)={truncation_str}, "
                         f"lr={current_lr:.2e}, steps/sec={steps_per_sec:.2f}"
                     )
                     if config.use_wandb and wandb is not None:

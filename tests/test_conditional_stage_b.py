@@ -185,6 +185,30 @@ class StubT5(nn.Module):
         return self.embedding(input_ids)
 
 
+class PlanTokenCapacityTests(unittest.TestCase):
+    def test_span_vae_capacity_keeps_the_whole_thinking(self):
+        rows = _rows(n=1, thinking_words=600)
+        legacy = ConditionalCollator(WordTokenizer(), max_length=64, condition_max_tokens=32,
+                                     max_plan_slots=64)(rows)
+        self.assertEqual(legacy["plan_input_ids"].shape[1], 256)
+        self.assertEqual(int(legacy["thinking_truncated"].sum()), 1)
+        vae = ConditionalCollator(WordTokenizer(), max_length=64, condition_max_tokens=32,
+                                  max_plan_slots=64, plan_token_capacity=1024)(rows)
+        self.assertEqual(vae["plan_input_ids"].shape[1], 601)   # 600 words + EOS
+        self.assertEqual(int(vae["thinking_truncated"].sum()), 0)
+
+    def test_capacity_follows_the_plan_source(self):
+        from types import SimpleNamespace
+        from utils.conditional_data import plan_token_capacity_for
+        self.assertEqual(plan_token_capacity_for(SimpleNamespace(
+            plan_source="span_vae", max_plan_slots=64, num_plan_slots=64)), 1024)
+        self.assertEqual(plan_token_capacity_for(SimpleNamespace(
+            plan_source="thinking_mlp_4to1", max_plan_slots=255, num_plan_slots=255)), 1020)
+        with self.assertRaises(ValueError):
+            plan_token_capacity_for(SimpleNamespace(plan_source="span_vae", max_plan_slots=16,
+                                                    num_plan_slots=16))
+
+
 class ConditionalStepTests(unittest.TestCase):
     def _run(self, mode, decoder_prob=0.0):
         config = _tiny_config(mode)

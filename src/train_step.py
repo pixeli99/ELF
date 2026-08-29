@@ -386,6 +386,11 @@ def train_step(
             plan.t_plan_input is not None and torch.count_nonzero(plan.t_plan_input).item() == 0),
         "register_no_thinking_target": bool(group.register_only and plan.x0_plan is None),
     }
+    # Collator truncation flags (conditional Stage-B). Surfaced per step so a
+    # silently capped plan target shows up in the log instead of in the results.
+    for key in ("prompt_truncated", "response_truncated", "thinking_truncated"):
+        if key in batch:
+            metrics[key] = batch[key].float().sum().detach()
     if bool(getattr(config,"engineering_smoke_report",False)):
         metrics.update({
             "response_noise_sha256": _diagnostic_tensor_hash(noise),
