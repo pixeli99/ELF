@@ -71,14 +71,61 @@ test 参考里 25%（250/1000）以 `\boxed{}` 或 `#### N` 收尾，是可验�
 **ROUGE 上那 0.2~0.8 分的差异不代表推理能力**，而 512 条样本的 CI 宽度（±0.6）本来也容不下
 这么小的效应。
 
-## 正在跑的两个诊断
+## 两个诊断的结果：前提成立，通路成立，瓶颈在 plan 表示
 
-1. **上界**：vanilla + gold thinking 直接当条件前缀（`condition_includes_thinking`）。
-   如果连 thinking 原文都帮不了 response，这个数据上"计划"没有可捞的收益。
-   产出 `outputs/eval_v5/ceiling_sched256/`。
-2. **能力上限**：ordered 且 `plan_done_frac=1`（response 训练时永远看到干净 gold plan，
-   `diagnostic_run: true`）。如果连这样都不用 plan 内容，是通路本身不成立，不是训练协议稀释。
-   产出 `outputs/audits/v5_oracleplan_10k_oracle_exactk_n128.json`。
+**上界（gold thinking 原文当条件前缀）**：256 条未见训练行，同一 backbone、同一预算、同一评测。
+
+| 模型 | R1 | R2 | RL | 答案率 | 准确率 |
+|---|---:|---:|---:|---:|---:|
+| vanilla（只有 prompt） | 31.7 | 11.7 | 21.7 | 76% | 4/95 = 4.2% |
+| vanilla + thinking 原文前缀 | 44.4 | 21.4 | 30.6 | 79% | **24/95 = 25.3%** |
+
+thinking 文本值 12.6 个 R1 点、六倍准确率。**"用推理过程帮回答"这个前提是成立的。**
+
+**通路（ordered 且 `plan_done_frac=1`，response 训练时永远看到干净 gold plan）**：128 条未见行。
+
+| 模型 / plan | R1 | oracle 减打乱 R1 [95% CI] |
+|---|---:|---|
+| oracle-plan 训练的模型 + gold plan | 33.14 | **+1.04 [+0.15, +1.96]** |
+| oracle-plan 训练的模型 + 长度匹配打乱 plan | 32.10 | |
+| 常规 v5 ordered + gold plan | 33.25 | +0.23 [-0.31, +0.78]（不显著） |
+
+第一次出现内容效应：只要训练时 plan 可靠，response 就会读 plan 的**内容**，不只是"有没有 plan"。
+所以之前的失败是训练协议稀释（一半的行 plan 是噪声，学会忽略），不是通路不通。
+但准确率没有跟着动（1/46 vs 2/46，n 太小且都接近 0）。
+
+**瓶颈：Plan-VAE 把答案丢了。** 把 gold thinking 过一遍 VAE 编解码，再用 ELF 解码头读回文本，
+看参考答案的数字还在不在（64 条，`tools/eval_plan_vae_roundtrip.py`）：
+
+| 压缩方式 | 每行浮点数 | 答案保留 |
+|---|---:|---:|
+| 不压缩（干净 T5 latent） | 524288 | 64/64 = 1.00 |
+| 每段均值 512 维 + 线性解码 | 32768 | 19/64 = 0.30 |
+| **每段 PCA 128 维 + 线性解码** | **8192** | **28/64 = 0.44** |
+| **Plan-VAE 64×128（v7，自带非线性解码器）** | **8192** | **15/64 = 0.23** |
+
+同样 8192 个浮点数，朴素的 PCA 保留 44%，训练出来的 VAE 只有 23%。**不是容量墙，是这个自编码器
+不够好**：β·KL + free bits + aux 三项压力把容量花在了别处。round-trip 的文本看得最清楚——
+骨架保住了，实体和数字没了：
+
+> thinking : `Let I be the number of pieces of candy Isabel had initially. Her friend gave her twenty-five more...`
+> roundtrip: `Let B be the total of of of Mrs Mrs had had.. She had and many many of of of pieces...`
+
+这也解释了全部现象：plan 能小幅提 ROUGE-1（骨架和风格对得上），但对准确率毫无贡献（数字没了），
+而且 oracle 和打乱只差一点点。
+
+## 结论与下一步
+
+三段推理链是完整的：
+1. 推理过程对回答有巨大价值（准确率 4.2% → 25.3%）。
+2. plan→response 通路是通的，只要训练时 plan 足够可靠（oracle 比打乱高 1.04 R1，显著）。
+3. 但当前 Plan-VAE 在自己的预算内只留下同预算 PCA 的一半内容，答案数字基本丢光。
+
+所以下一步不是加容量，也不是再调 plan-CFG，而是**先把 Plan-VAE 修好**，并且把验收指标从重构 MSE
+换成 round-trip 答案保留率——MSE 0.479（池化基线 0.539）看起来还行，答案保留率 23% 才是真相。
+正在跑六组 β / free-bits / aux 扫描（`outputs/run_plan_vae_sweep.sh`，每组约 16 分钟），
+含一个纯自编码器上界。KL 是 plan 能被扩散生成的前提，所以要找的是"仍可生成、且答案保留率接近
+PCA"的那个点。VAE 达标后再重跑 Stage-B ordered，届时 `plan_done_frac` 应取较大值（0.5 太稀）。
 
 ## 产物
 
