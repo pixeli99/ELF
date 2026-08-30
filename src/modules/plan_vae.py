@@ -40,6 +40,29 @@ def span_pool(x, mask):
     return pooled[:, :K_MAX], active[:, :K_MAX]
 
 
+def span_flatten(x, mask):
+    """Same fixed spans as `span_pool`, but keep the whole 16x512 block.
+
+    `span_pool` hands the encoder only each span's MEAN, so within-span detail -- the
+    entities and digits -- is gone before a single parameter sees it. Measured ceiling:
+    reconstructing from span means keeps 30% of gold numeric answers even at 32768
+    floats/row, while a per-span PCA of the full block keeps 44% at 8192, and the trained
+    mean-pooled VAEs land at 21-25%, just under their encoder's ceiling.
+    """
+    B, L, C = x.shape
+    pad = (SPAN - L % SPAN) % SPAN
+    xp = F.pad(x, (0, 0, 0, pad))
+    mp = F.pad(mask, (0, pad)).float()
+    k_here = xp.shape[1] // SPAN
+    grouped = xp.view(B, k_here, SPAN, C) * mp.view(B, k_here, SPAN, 1)
+    flat = grouped.reshape(B, k_here, SPAN * C)
+    active = mp.view(B, k_here, SPAN).sum(2) > 0
+    if k_here < K_MAX:
+        flat = F.pad(flat, (0, 0, 0, K_MAX - k_here))
+        active = F.pad(active, (0, K_MAX - k_here))
+    return flat[:, :K_MAX], active[:, :K_MAX]
+
+
 class SlotBlock(nn.Module):
     """Self-attention + FFN over the 64 slots (capacity re-allocation)."""
 
@@ -99,10 +122,13 @@ class PlanVAE(nn.Module):
     numeric answers through a round trip while the attention-only v7 keeps 21%.
     """
 
-    def __init__(self, span_decode: bool = False):
+    def __init__(self, span_decode: bool = False, span_input: str = "mean"):
         super().__init__()
+        if span_input not in ("mean", "flat"):
+            raise ValueError("span_input must be 'mean' or 'flat'")
         self.span_decode = bool(span_decode)
-        self.pool_in = nn.Linear(WIDTH, D_MODEL)
+        self.span_input = span_input
+        self.pool_in = nn.Linear(SPAN * WIDTH if span_input == "flat" else WIDTH, D_MODEL)
         self.slot_pos = nn.Parameter(torch.randn(1, K_MAX, D_MODEL) * 0.02)
         self.enc = nn.ModuleList([SlotBlock() for _ in range(2)])
         self.mu = nn.Linear(D_MODEL, Z_DIM)
@@ -129,7 +155,8 @@ class PlanVAE(nn.Module):
                                  nn.Linear(1024, WIDTH))
 
     def posterior(self, x, mask):
-        pooled, active = span_pool(x, mask)
+        pooled, active = (span_flatten(x, mask) if self.span_input == "flat"
+                          else span_pool(x, mask))
         q = self.pool_in(pooled) + self.slot_pos
         for block in self.enc:
             q = block(q, active)
@@ -171,7 +198,8 @@ def load_frozen_plan_vae(artifact_path, device="cpu", expected_sha256=None):
     artifact = torch.load(artifact_path, map_location="cpu", weights_only=True)
     if int(artifact["k_max"]) != K_MAX or int(artifact["z_dim"]) != Z_DIM:
         raise ValueError("plan VAE artifact dimensions do not match this module")
-    model = PlanVAE(span_decode=bool(artifact.get("span_decode", False)))
+    model = PlanVAE(span_decode=bool(artifact.get("span_decode", False)),
+                    span_input=str(artifact.get("span_input", "mean")))
     model.load_state_dict(artifact["state_dict"], strict=True)
     model = model.to(device).eval().requires_grad_(False)
     meta = {k: v for k, v in artifact.items() if k != "state_dict"}
