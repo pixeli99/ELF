@@ -127,6 +127,11 @@ class Config:
     # objective exactly; b applies 1 + b * (1 - t_plan)^2. The multiplier is
     # deliberately not normalized away because formal Stage-B uses microbatch 1.
     plan_low_t_loss_boost: float = 0.0
+
+    # Skip the formal four-group protocol assert at launch. Only for diagnostics that
+    # deliberately leave the protocol (e.g. plan_done_frac = 1, a response that always
+    # sees the clean gold plan); such runs must never appear in a group comparison table.
+    diagnostic_run: bool = False
     # --- plan clock training distribution (2D time grid coverage) ---
     # Science-arm default: t_plan | t ~ U[0,1] plus an atom at t_plan=1. Conditional-uniform makes
     # the training density along ANY monotone trajectory equal to f(t)*1, so diagonal /

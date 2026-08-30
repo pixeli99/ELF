@@ -52,7 +52,7 @@ from utils.encoder_utils import encode_text, encode_thinking_x0
 from utils.dolma_data import DolmaStreamDataset, get_dolma_dataloader
 from utils.conditional_data import (ConditionalPairedDataset, ConditionalSchedule,
                                     get_conditional_dataloader)
-from utils.plan_stream import assert_group_protocol, compress_thinking_to_slots
+from utils.plan_stream import assert_group_protocol, compress_thinking_to_slots, resolve_group
 from utils.sampling_utils import frozen_pool_plan_target
 from utils.plan_utils import build_thinking_plan_target
 from train_step import train_step
@@ -372,7 +372,11 @@ def run_training(config, *, force_cpu: bool = False):
     if config.resume and config.init_from:
         raise ValueError("Config cannot set both resume and init_from: resume restores training state; "
                          "init_from only warm-starts model weights.")
-    group = assert_group_protocol(config)
+    if bool(getattr(config, "diagnostic_run", False)):
+        group = resolve_group(config)
+        log_for_0(f"DIAGNOSTIC run: formal group protocol not asserted (group_mode={group.mode})")
+    else:
+        group = assert_group_protocol(config)
     group_mode = group.mode
 
     if config.use_wandb and rank == 0 and wandb is not None:

@@ -1,0 +1,9 @@
+# Diagnostic (not a group-comparison arm): plan_done_frac = 1, so the response ALWAYS
+# trains against the clean gold plan. Answers whether the response stream can learn to
+# use plan content at all when the plan is perfectly reliable. Plan generation is
+# degenerate by construction here (the plan denoiser only ever sees t_plan = 1), so this
+# checkpoint is evaluated with an oracle plan, never as a deployable model.
+base_config: train_conditional_common48w_ordered_causal_eos_v5.yml
+output_dir: outputs/elf_b_conditional_common48w_ordered_oracleplan_eos_v5
+plan_done_frac: 1.0
+diagnostic_run: true
