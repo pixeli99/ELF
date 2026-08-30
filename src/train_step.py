@@ -44,6 +44,50 @@ def _diagnostic_tensor_hash(value):
     ).hexdigest()
 
 
+def _sample_plan_mediation_mask(batch, batch_size, probability, generator, device):
+    """Sample the training-only prompt-bypass intervention without perturbing formal RNG.
+
+    Formal Stage-B rows carry a stable branch seed. Hashing that seed makes the
+    intervention deterministic across resume while leaving every existing noise,
+    branch, self-conditioning, and model RNG stream untouched. Legacy batches use
+    the training generator only when the intervention is enabled.
+    """
+    probability = float(probability)
+    if not 0.0 <= probability <= 1.0:
+        raise ValueError("plan_mediation_prob must be within [0, 1]")
+    if probability == 0.0:
+        return None
+    if probability == 1.0:
+        return torch.ones((batch_size,), dtype=torch.bool, device=device)
+    if "branch_seed" in batch:
+        values = batch["branch_seed"].reshape(-1)
+        if values.numel() != batch_size:
+            raise ValueError("branch_seed must contain one value per batch row")
+        threshold = int(probability * (2 ** 64))
+        selected = []
+        for value in values.tolist():
+            digest = hashlib.sha256(f"plan-mediation:{int(value)}".encode()).digest()
+            selected.append(int.from_bytes(digest[:8], "little") < threshold)
+        return torch.tensor(selected, dtype=torch.bool, device=device)
+    return (
+        torch.rand((batch_size,), generator=generator) < probability
+    ).to(device=device)
+
+
+def _gate_plan_mediation_by_clock(mask, t_plan_input, minimum):
+    """Keep sampled mediation rows only when the model sees a sufficiently clean plan."""
+    minimum = float(minimum)
+    if not 0.0 <= minimum <= 1.0:
+        raise ValueError("plan_mediation_min_t must be within [0, 1]")
+    if mask is None:
+        return None
+    if t_plan_input is None:
+        raise ValueError("plan mediation requires a runtime plan clock")
+    if tuple(t_plan_input.shape) != tuple(mask.shape):
+        raise ValueError("runtime plan clock must have shape [B]")
+    return mask & (t_plan_input >= minimum)
+
+
 def train_step(
     state: TrainState,
     encoder: nn.Module,
@@ -93,6 +137,7 @@ def train_step(
     input_ids = batch["input_ids"].to(device, non_blocking=True).long()
     encoder_attention_mask = batch["encoder_attention_mask"].to(device, dtype=torch.float32, non_blocking=True)
     cond_seq_mask = batch["cond_seq_mask"].to(device, dtype=torch.float32, non_blocking=True)
+    condition_token_mask = cond_seq_mask.bool()
     attention_mask = batch["attention_mask"].to(device, dtype=torch.float32, non_blocking=True)
     label_drop_mask = batch.get("label_drop_mask",
                                 torch.zeros((input_ids.shape[0],), dtype=torch.bool)).to(device, non_blocking=True)
@@ -118,6 +163,18 @@ def train_step(
     ).to(dtype)
 
     batch_size, seq_length = x0.shape[0], x0.shape[1]
+
+    plan_mediation_prob = float(getattr(config, "plan_mediation_prob", 0.0))
+    plan_mediation_mask = _sample_plan_mediation_mask(
+        batch, batch_size, plan_mediation_prob, gen, device,
+    )
+    if plan_mediation_mask is not None:
+        attention_mode = getattr(unwrap_model(state.model), "plan_response_attention", None)
+        if attention_mode != "prompt_causal_bottleneck":
+            raise ValueError(
+                "plan_mediation_prob > 0 requires "
+                "plan_response_attention='prompt_causal_bottleneck'"
+            )
 
     schedule_seed("token_time_seed")
     t = sample_timesteps(
@@ -178,6 +235,10 @@ def train_step(
         decoder_step_active=decoder_step_active, x0=x0, loss_mask=loss_mask,
         schedule_seed=schedule_seed,
     )
+    plan_mediation_mask = _gate_plan_mediation_by_clock(
+        plan_mediation_mask, plan.t_plan_input,
+        getattr(config, "plan_mediation_min_t", 0.0),
+    )
 
     schedule_seed("branch_seed", offset=1)
     if self_cond_prob > 0:
@@ -209,6 +270,8 @@ def train_step(
                 deterministic=True, self_cond_cfg_scale=self_cond_cfg_scale,
                 x_plan=plan.aux_x, t_plan=plan.aux_t,
                 plan_mask=plan.plan_mask,
+                condition_token_mask=condition_token_mask,
+                plan_mediation_mask=plan_mediation_mask,
             )
         return net_out_uncond
 
@@ -220,6 +283,8 @@ def train_step(
                     deterministic=True, self_cond_cfg_scale=self_cond_cfg_scale,
                     x_plan=plan.aux_x, t_plan=plan.aux_t,
                     plan_mask=plan.plan_mask,
+                    condition_token_mask=condition_token_mask,
+                    plan_mediation_mask=plan_mediation_mask,
                 )
             v_uncond, _ = net_out_to_v_x(net_out_uncond, z, t_input, t_eps)
             return v_uncond, v_uncond
@@ -234,6 +299,8 @@ def train_step(
                 deterministic=True, self_cond_cfg_scale=self_cond_cfg_scale,
                 x_plan=plan.aux_x, t_plan=plan.aux_t,
                 plan_mask=plan.plan_mask,
+                condition_token_mask=condition_token_mask,
+                plan_mediation_mask=plan_mediation_mask,
             )
         v_cond, _ = net_out_to_v_x(net_out_cond, z, t_input, t_eps)
         return v_cond, v_uncond
@@ -295,6 +362,8 @@ def train_step(
             decoder_step_active=decoder_step_active,  # (B,) tensor
             x_plan=plan.x_plan_input, t_plan=plan.t_plan_input,
             plan_mask=plan.plan_mask,
+            condition_token_mask=condition_token_mask,
+            plan_mediation_mask=plan_mediation_mask,
         )
 
     # CE per-token (used on decoder-mode rows).
@@ -335,7 +404,10 @@ def train_step(
     # The sampler still derives the plan velocity from plan_out, unchanged.
     # When the plan stream is disabled (or in the register-only arm), `loss` is untouched.
     if plan.supervised:
-        plan_l2 = plan_loss(plan_out, plan, decoder_step_active)
+        plan_l2 = plan_loss(
+            plan_out, plan, decoder_step_active,
+            low_t_boost=float(getattr(config, "plan_low_t_loss_boost", 0.0)),
+        )
         loss = loss + config.plan_loss_weight * plan_l2
         plan_l2_val = plan_l2.detach()
     else:
@@ -372,6 +444,9 @@ def train_step(
                              else torch.zeros((), device=device)),
         "plan_capacity_slots": (torch.tensor(plan.plan_mask.numel(), device=device)
                                 if plan.plan_mask is not None else torch.zeros((), device=device)),
+        "plan_mediation_rows": (plan_mediation_mask.sum().detach()
+                                  if plan_mediation_mask is not None
+                                  else torch.zeros((), device=device)),
         "optimizer_step": is_optimizer_step,
         "denoiser_rows": (1.0 - decoder_mask_B1).sum().detach(),
         "decoder_rows": decoder_mask_B1.sum().detach(),

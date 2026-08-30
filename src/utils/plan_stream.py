@@ -295,7 +295,8 @@ def build_plan_stream(
     )
 
 
-def plan_loss(plan_out, stream: PlanStream, decoder_step_active):
+def plan_loss(plan_out, stream: PlanStream, decoder_step_active,
+              low_t_boost: float = 0.0):
     """Plan x-prediction MSE over supervised slots on denoiser rows.
 
     x-space rather than the tokens' v-space on purpose: v-MSE = x-MSE / (1-t)^2
@@ -308,4 +309,15 @@ def plan_loss(plan_out, stream: PlanStream, decoder_step_active):
     per_slot = (plan_out - stream.x0_plan).square().mean(dim=-1)  # (B, K)
     denoiser_rows = (1.0 - decoder_step_active.view(-1, 1)).to(per_slot.dtype)
     weights = denoiser_rows * stream.plan_mask.to(per_slot.dtype)
-    return (per_slot * weights).sum() / weights.sum().clamp_min(1.0)
+    if low_t_boost < 0:
+        raise ValueError("plan_low_t_loss_boost must be non-negative")
+    if low_t_boost:
+        if stream.plan_t is None:
+            raise ValueError("low-t plan loss weighting requires a sampled plan clock")
+        time_weight = 1.0 + float(low_t_boost) * (1.0 - stream.plan_t.float()).square()
+        numerator = (per_slot * weights * time_weight.to(per_slot.dtype).view(-1, 1)).sum()
+    else:
+        numerator = (per_slot * weights).sum()
+    # Normalize by the original valid-slot count, not the boosted mass. Otherwise
+    # the multiplier cancels exactly in the batch-size-one formal protocol.
+    return numerator / weights.sum().clamp_min(1.0)

@@ -75,6 +75,7 @@ def _load_model(config, device):
         num_plan_time_tokens=config.num_plan_time_tokens,
         plan_whiten=config.plan_whiten,
         plan_target_dim=config.plan_target_dim,
+        plan_response_attention=getattr(config, "plan_response_attention", "bidirectional"),
     ).to(device).eval()
     return model, tokenizer
 
@@ -97,7 +98,10 @@ def _load_weights(model, ckpt_path, device):
 
 def _decode(z, model, config, x_plan, eos_token_id, pad_token_id, tokenizer):
     ids = _dlm_decode_batch(z=z, model=model, t_final_val=1.0, config=config,
-                            self_cond_cfg_scale=1.0, x_plan=x_plan)
+                            self_cond_cfg_scale=1.0, x_plan=x_plan,
+                            condition_token_mask=torch.zeros(
+                                z.shape[:2], dtype=torch.bool, device=z.device,
+                            ))
     ids = mask_after_eos(ids, eos_token_id=eos_token_id, pad_token_id=pad_token_id)
     texts = [tokenizer.decode(ids[i].cpu().numpy(), skip_special_tokens=True)
              for i in range(ids.shape[0])]

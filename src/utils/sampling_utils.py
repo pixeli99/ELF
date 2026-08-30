@@ -182,6 +182,13 @@ def _forward_sample_self_cond(
     t_eps = config.t_eps
     self_cond_prob = config.self_cond_prob
     pk = dict(x_plan=x_plan, t_plan=t_plan_batch, plan_mask=plan_mask)
+    if cond_seq_mask is not None:
+        condition_token_mask = cond_seq_mask
+        while condition_token_mask.dim() > 2 and condition_token_mask.shape[-1] == 1:
+            condition_token_mask = condition_token_mask.squeeze(-1)
+        if tuple(condition_token_mask.shape) != tuple(z.shape[:2]):
+            raise ValueError("cond_seq_mask must identify [B, S] prompt positions")
+        pk["condition_token_mask"] = condition_token_mask.bool()
     if response_attention_mask is not None:
         pk["attention_mask"] = response_attention_mask
 

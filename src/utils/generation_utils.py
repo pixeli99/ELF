@@ -149,6 +149,11 @@ def _generate_samples_single_batch(
         else:
             z_plan = (torch.randn((batch_size, runtime_plan_slots, d_plan),
                                   generator=generator, dtype=z.dtype) * config.denoiser_noise_scale).to(z.device)
+        # Grid-CFG's null branch is the run's original t_plan=0 noise.  Capture
+        # it before an oracle/grafting override replaces the conditioned plan;
+        # otherwise both CFG branches become the same clean plan and the
+        # requested plan-CFG scale is silently disabled for oracle audits.
+        initial_plan_for_cfg = z_plan.clone()
         if plan_override is not None:
             z_plan = plan_override[0].to(device=z.device, dtype=z.dtype)
         if plan_state_fn is not None:
@@ -160,7 +165,8 @@ def _generate_samples_single_batch(
     # Plan grid-CFG null condition: the run's OWN initial noise plan at t_plan = 0
     # (deterministic, no extra RNG — "the plan as if it had never been denoised").
     plan_cfg_scale = float(getattr(sampling_config, "plan_cfg_scale", 1.0)) if plan_on else 1.0
-    z_plan_null = z_plan.clone() if (plan_on and plan_cfg_scale != 1.0) else None
+    z_plan_null = (initial_plan_for_cfg
+                   if plan_on and plan_cfg_scale != 1.0 else None)
 
     step_kwargs = dict(
         model=model, config=config,
@@ -271,7 +277,8 @@ def _dlm_decode_logits_batch(z: torch.Tensor, model: nn.Module, t_final_val,
                              t_plan_decode_val: Optional[float] = None,
                              plan_trajectory: Optional[str] = None,
                              plan_mask: Optional[torch.Tensor] = None,
-                             attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+                             attention_mask: Optional[torch.Tensor] = None,
+                             condition_token_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
     """Return decoder logits for a response latent using the generation decode path.
 
     Normal ordered trajectories (diagonal / planning_first / lagging) decode with
@@ -288,6 +295,15 @@ def _dlm_decode_logits_batch(z: torch.Tensor, model: nn.Module, t_final_val,
             if not bool(((attention_mask == 0) | (attention_mask == 1)).all()):
                 raise ValueError("attention_mask must be bool or contain only 0/1")
             attention_mask = attention_mask.bool()
+    if condition_token_mask is not None:
+        while condition_token_mask.dim() > 2 and condition_token_mask.shape[-1] == 1:
+            condition_token_mask = condition_token_mask.squeeze(-1)
+        if tuple(condition_token_mask.shape) != tuple(z.shape[:2]):
+            raise ValueError("condition_token_mask must have shape [B, response_width]")
+        if condition_token_mask.dtype != torch.bool:
+            if not bool(((condition_token_mask == 0) | (condition_token_mask == 1)).all()):
+                raise ValueError("condition_token_mask must be bool or contain only 0/1")
+            condition_token_mask = condition_token_mask.bool()
     if isinstance(t_final_val, torch.Tensor) and t_final_val.dim() == 0:
         t_final = torch.full((batch_size,), t_final_val.item(), dtype=z.dtype, device=z.device)
     else:
@@ -312,6 +328,7 @@ def _dlm_decode_logits_batch(z: torch.Tensor, model: nn.Module, t_final_val,
             decoder_step_active=True,
             x_plan=x_plan, t_plan=t_plan,
             plan_mask=plan_mask,
+            condition_token_mask=condition_token_mask,
         )
     return decoder_logits
 
@@ -322,13 +339,15 @@ def _dlm_decode_batch(z: torch.Tensor, model: nn.Module, t_final_val,
                       t_plan_decode_val: Optional[float] = None,
                       plan_trajectory: Optional[str] = None,
                       plan_mask: Optional[torch.Tensor] = None,
-                      attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+                      attention_mask: Optional[torch.Tensor] = None,
+                      condition_token_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
     """Decode z -> token IDs with the unchanged DLM decoder path."""
     logits=_dlm_decode_logits_batch(
         z=z,model=model,t_final_val=t_final_val,config=config,
         self_cond_cfg_scale=self_cond_cfg_scale,x_plan=x_plan,
         t_plan_decode_val=t_plan_decode_val,plan_trajectory=plan_trajectory,
         plan_mask=plan_mask,attention_mask=attention_mask,
+        condition_token_mask=condition_token_mask,
     )
     return logits.argmax(dim=-1)
 

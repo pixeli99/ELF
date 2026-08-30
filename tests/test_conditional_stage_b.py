@@ -15,10 +15,12 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 from configs.config import Config, load_config_from_yaml
 from modules.model import ELF
 from modules.thinking_resampler import build_adjacent_mlp_encoder
-from train_step import train_step
+from train_step import (
+    _gate_plan_mediation_by_clock, _sample_plan_mediation_mask, train_step,
+)
 from utils.conditional_data import (ConditionalCollator, ConditionalSchedule,
                                     derive_seed, truncation_metrics)
-from utils.plan_stream import assert_group_protocol
+from utils.plan_stream import PlanStream, assert_group_protocol, plan_loss
 from utils.train_utils import TrainState
 
 WIDTH, VOCAB = 8, 64
@@ -171,6 +173,8 @@ def _tiny_config(mode, max_length=64):
     config.plan_done_frac = 0.15 if mode == "ordered" else 0.0
     config.plan_diag_frac = 1.0 if mode == "diagonal" else 0.0
     config.plan_loss_weight = 0.0 if mode == "register" else 1.0
+    config.plan_response_attention = ("bidirectional" if mode == "vanilla"
+                                      else "prompt_causal_bottleneck")
     return config
 
 
@@ -210,9 +214,10 @@ class PlanTokenCapacityTests(unittest.TestCase):
 
 
 class ConditionalStepTests(unittest.TestCase):
-    def _run(self, mode, decoder_prob=0.0):
+    def _run(self, mode, decoder_prob=0.0, plan_mediation_prob=0.0):
         config = _tiny_config(mode)
         config.decoder_prob = decoder_prob
+        config.plan_mediation_prob = plan_mediation_prob
         batch = ConditionalCollator(WordTokenizer(), max_length=config.max_length,
                                     condition_max_tokens=32, max_plan_slots=16)(_rows(n=1))
         torch.manual_seed(0)
@@ -220,13 +225,16 @@ class ConditionalStepTests(unittest.TestCase):
                     depth=1, num_heads=4, bottleneck_dim=4, num_time_tokens=1,
                     num_self_cond_cfg_tokens=0, num_model_mode_tokens=1, vocab_size=VOCAB,
                     num_plan_slots=config.num_plan_slots, num_plan_time_tokens=1,
-                    plan_whiten="none")
+                    plan_whiten="none",
+                    plan_response_attention=config.plan_response_attention)
         seen = {}
         inner = model.forward
 
         def recording(*args, **kwargs):
             seen.setdefault("x", args[0])
             seen.setdefault("plan_mask", kwargs.get("plan_mask"))
+            seen.setdefault("condition_token_mask", kwargs.get("condition_token_mask"))
+            seen.setdefault("plan_mediation_mask", kwargs.get("plan_mediation_mask"))
             return inner(*args, **kwargs)
 
         model.forward = recording
@@ -284,6 +292,38 @@ class ConditionalStepTests(unittest.TestCase):
         batch, metrics, seen = self._run("ordered")
         self.assertEqual(int(metrics["plan_valid_slots"]),
                          int((batch["plan_attention_mask"].sum(1) + 3) // 4))
+        self.assertTrue(torch.equal(
+            seen["condition_token_mask"].cpu(), batch["cond_seq_mask"].bool(),
+        ))
+
+    def test_full_plan_mediation_reaches_every_training_forward(self):
+        _, metrics, seen = self._run("ordered", plan_mediation_prob=1.0)
+        self.assertEqual(int(metrics["plan_mediation_rows"]), 1)
+        self.assertTrue(bool(seen["plan_mediation_mask"].all()))
+
+    def test_formal_plan_mediation_sampling_is_resume_stable(self):
+        batch = {"branch_seed": torch.arange(64, dtype=torch.long)}
+        generator = torch.Generator().manual_seed(7)
+        state_before = generator.get_state().clone()
+        a = _sample_plan_mediation_mask(batch, 64, 0.5, generator, torch.device("cpu"))
+        b = _sample_plan_mediation_mask(
+            batch, 64, 0.5, torch.Generator().manual_seed(99), torch.device("cpu"),
+        )
+        self.assertTrue(torch.equal(a, b))
+        self.assertTrue(torch.equal(generator.get_state(), state_before))
+        self.assertGreater(int(a.sum()), 0)
+        self.assertLess(int(a.sum()), 64)
+        self.assertIsNone(_sample_plan_mediation_mask(
+            batch, 64, 0.0, generator, torch.device("cpu"),
+        ))
+
+    def test_plan_mediation_can_require_a_clean_plan_clock(self):
+        sampled = torch.tensor([True, True, True, False])
+        clock = torch.tensor([0.2, 0.75, 1.0, 1.0])
+        gated = _gate_plan_mediation_by_clock(sampled, clock, 0.75)
+        self.assertEqual(gated.tolist(), [False, True, True, False])
+        with self.assertRaisesRegex(ValueError, "within"):
+            _gate_plan_mediation_by_clock(sampled, clock, 1.1)
 
 
 class ConditionalEncodingTests(unittest.TestCase):
@@ -332,6 +372,33 @@ class ConditionalEncodingTests(unittest.TestCase):
 
 
 class ConditionalConfigTests(unittest.TestCase):
+    def test_list_config_override_preserves_list_type(self):
+        from configs.config import Config, apply_config_overrides
+
+        config = Config()
+        config.save_optimizer_steps = [1000, 2000]
+        updated = apply_config_overrides(
+            config, ["save_optimizer_steps=[500, 1000]"]
+        )
+        self.assertEqual(updated.save_optimizer_steps, [500, 1000])
+        with self.assertRaisesRegex(ValueError, "must be a YAML list"):
+            apply_config_overrides(config, ["save_optimizer_steps=500"])
+
+    def test_low_time_plan_boost_survives_microbatch_one_normalization(self):
+        prediction = torch.ones(1, 2, 3)
+        stream = PlanStream(
+            plan_mask=torch.ones(1, 2, dtype=torch.bool),
+            x0_plan=torch.zeros_like(prediction),
+            plan_t=torch.tensor([0.0]),
+            supervised=True,
+        )
+        decoder = torch.zeros(1)
+        self.assertEqual(float(plan_loss(prediction, stream, decoder)), 1.0)
+        self.assertEqual(
+            float(plan_loss(prediction, stream, decoder, low_t_boost=3.0)),
+            4.0,
+        )
+
     def test_shipped_conditional_overlays_are_consistent(self):
         for mode in ("ordered", "diagonal", "register", "vanilla"):
             with self.subTest(mode=mode):

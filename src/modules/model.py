@@ -15,7 +15,11 @@ from modules.layers import (
 )
 
 
-PLAN_RESPONSE_ATTENTION_MODES = ("bidirectional", "causal_bottleneck")
+PLAN_RESPONSE_ATTENTION_MODES = (
+    "bidirectional",
+    "causal_bottleneck",
+    "prompt_causal_bottleneck",
+)
 PLAN_WHITEN_MODES = ("none", "zscore", "pca", "external")
 
 
@@ -27,6 +31,8 @@ def build_plan_response_attention_mask(
     num_time_tokens: int,
     num_plan_time_tokens: int,
     mode: str,
+    condition_token_mask: Optional[torch.Tensor] = None,
+    plan_mediation_mask: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     """Build padding/key permissions for the runtime [prefix, mode, plan, response] layout."""
     if mode not in PLAN_RESPONSE_ATTENTION_MODES:
@@ -37,6 +43,19 @@ def build_plan_response_attention_mask(
     prefix_valid = torch.ones((batch, prefix_len), dtype=torch.bool, device=device)
     mode_valid = torch.ones((batch, mode_len), dtype=torch.bool, device=device)
     valid = torch.cat((prefix_valid, mode_valid, plan_valid.bool(), token_valid.bool()), dim=1)
+    if plan_mediation_mask is not None:
+        if tuple(plan_mediation_mask.shape) != (batch,):
+            raise ValueError("plan_mediation_mask must have shape [B]")
+        if plan_mediation_mask.device != device:
+            raise ValueError("plan_mediation_mask must be on the same device as token_valid")
+        if plan_mediation_mask.dtype != torch.bool:
+            if not bool(((plan_mediation_mask == 0) | (plan_mediation_mask == 1)).all()):
+                raise ValueError("plan_mediation_mask must be bool or contain only 0/1")
+            plan_mediation_mask = plan_mediation_mask.bool()
+        if mode != "prompt_causal_bottleneck" and bool(plan_mediation_mask.any()):
+            raise ValueError(
+                "plan mediation requires plan_response_attention='prompt_causal_bottleneck'"
+            )
     if mode == "bidirectional":
         return valid
 
@@ -46,6 +65,46 @@ def build_plan_response_attention_mask(
     plan_end = plan_start + plan_len
     plan_time_start = num_time_tokens
     plan_time_end = min(prefix_len, plan_time_start + num_plan_time_tokens)
+    if mode == "prompt_causal_bottleneck":
+        if condition_token_mask is None:
+            raise ValueError(
+                "prompt_causal_bottleneck requires condition_token_mask with shape [B, S]"
+            )
+        if tuple(condition_token_mask.shape) != (batch, response_len):
+            raise ValueError("condition_token_mask must have shape [B, S]")
+        if condition_token_mask.device != device:
+            raise ValueError("condition_token_mask must be on the same device as token_valid")
+        if condition_token_mask.dtype != torch.bool:
+            if not bool(((condition_token_mask == 0) | (condition_token_mask == 1)).all()):
+                raise ValueError("condition_token_mask must be bool or contain only 0/1")
+            condition_token_mask = condition_token_mask.bool()
+        if bool((condition_token_mask & ~token_valid.bool()).any()):
+            raise ValueError("condition_token_mask must be a subset of token_valid")
+
+        # Prompt tokens and plan tokens form a closed subsystem at every layer:
+        # they may read each other and the plan clock, but never response/shared
+        # prefix/mode states that could already contain response information.
+        side = torch.zeros((batch, total), dtype=torch.bool, device=device)
+        side[:, plan_time_start:plan_time_end] = True
+        side[:, plan_start:plan_end] = plan_valid.bool()
+        side[:, plan_end:] = condition_token_mask
+        allowed = torch.where(side[:, :, None], side[:, None, :], allowed)
+        if plan_mediation_mask is not None and bool(plan_mediation_mask.any()):
+            # On selected training rows, response/shared queries may still read
+            # the plan, but cannot bypass it by reading prompt-token keys. Prompt
+            # and plan queries retain the closed prompt-aware subsystem above.
+            prompt_keys = torch.zeros((batch, total), dtype=torch.bool, device=device)
+            prompt_keys[:, plan_end:] = condition_token_mask
+            bypass = (
+                plan_mediation_mask[:, None, None]
+                & ~side[:, :, None]
+                & prompt_keys[:, None, :]
+            )
+            allowed &= ~bypass
+        # Invalid plan queries produce no attention result and are zeroed at the output head.
+        allowed[:, plan_start:plan_end, :] &= plan_valid[:, :, None].bool()
+        return allowed
+
     # Shared time/CFG/mode tokens may absorb response information in earlier layers.
     # The entire plan side (plan-time + plan slots) therefore reads only itself.
     plan_query_parts = []
@@ -309,10 +368,16 @@ class ELF(nn.Module):
         x_plan: Optional[torch.Tensor] = None,
         t_plan: Optional[torch.Tensor] = None,
         plan_mask: Optional[torch.Tensor] = None,
+        condition_token_mask: Optional[torch.Tensor] = None,
+        plan_mediation_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
         """x: (N, S, C) or (N, S, 2C) with self-cond. t: (N,). attention_mask: (N, S), 1=valid.
 
         x_plan: (N, K, plan_latent_dim) noised plan latent (no self-cond). t_plan: (N,) plan clock.
+        condition_token_mask: (N, S), 1 for clean prompt positions. Required by
+        prompt_causal_bottleneck so prompt/plan cannot indirectly read the response.
+        plan_mediation_mask: optional (N,) training intervention. Selected rows
+        force non-plan queries to receive prompt information through plan slots.
         Returns (output, decoder_logits, plan_output). plan_output is (N, K, plan_latent_dim) or None.
         """
         B = x.shape[0]
@@ -406,6 +471,8 @@ class ELF(nn.Module):
                 num_time_tokens=self.num_time_tokens,
                 num_plan_time_tokens=self.num_plan_time_tokens,
                 mode=self.plan_response_attention,
+                condition_token_mask=condition_token_mask,
+                plan_mediation_mask=plan_mediation_mask,
             )
 
         use_checkpoint = self.gradient_checkpointing and self.training and torch.is_grad_enabled()

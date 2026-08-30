@@ -1,0 +1,13 @@
+# Exploratory continuation informed by the p=0.5 all-clock branch. Direct
+# prompt bypass is blocked only when the runtime plan is at least 75% denoised;
+# decoder rows always carry a clean t_plan=1 plan and are therefore included.
+# This keeps the effective mediation rate near one half without routing answers
+# through low-t plans that are still dominated by noise.
+base_config: train_conditional_common48w_ordered_causal_10k_v1.yml
+output_dir: outputs/elf_b_conditional_common48w_ordered_causal_mediation_t075_from5k_to6k_v1
+init_from: null
+resume: outputs/elf_b_conditional_common48w_ordered_causal_10k_v1/checkpoint_5000
+plan_mediation_prob: 1.0
+plan_mediation_min_t: 0.75
+max_optimizer_steps: 6000
+save_optimizer_steps: [6000]

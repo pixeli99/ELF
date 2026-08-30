@@ -218,6 +218,9 @@ def test_generation_uncond(
                     x_plan=latent_plan,
                     plan_trajectory=plan_trajectory,
                     t_plan_decode_val=0.0 if is_null else 1.0,
+                    condition_token_mask=torch.zeros(
+                        latent.shape[:2], dtype=torch.bool, device=latent.device,
+                    ),
                 )
                 decode_time += time.time() - dec_start
 
@@ -426,6 +429,7 @@ def test_generation_cond(
                     config.num_plan_slots > 0
                     and getattr(sampling_config, "plan_trajectory", None) == "null"
                 ) else 1.0),
+                condition_token_mask=cond_seq_mask_arr,
             )
             predicted_ids = shift_left(predicted_ids, cond_len_per_sample, 0)[:, :gen_length]
             predicted_ids = mask_after_eos(predicted_ids, eos_token_id=eos_token_id, pad_token_id=pad_token_id)

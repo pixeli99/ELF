@@ -27,7 +27,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer
 
 from modules.t5_encoder import get_encoder
-from modules.plan_vae import load_frozen_plan_vae
+from modules.plan_vae import SPAN as PLAN_VAE_SPAN, load_frozen_plan_vae
 from modules.thinking_resampler import (
     build_adjacent_mlp_encoder, freeze_module, ThinkingMLPConfig, ThinkingMLPEncoder,
 )
@@ -900,10 +900,18 @@ def run_training(config, *, force_cpu: bool = False):
                 total_used, gpu_processes = _gpu_memory_snapshot()
                 if total_used is not None:
                     smoke_peak_total_mib = max(smoke_peak_total_mib, total_used)
-                ids = list(batch.get("sample_id", []))
+                ids = list(batch.get("sample_id") or batch.get("example_id") or [])
                 smoke_sample_ids.extend(ids)
                 plan_token_lengths = batch["plan_attention_mask"].sum(1).cpu()
-                k_values = ((plan_token_lengths + 3) // 4).tolist()
+                plan_tokens_per_slot = (
+                    PLAN_VAE_SPAN
+                    if getattr(config, "plan_source", "frozen_pool") == "span_vae"
+                    else 4
+                )
+                k_values = (
+                    (plan_token_lengths + plan_tokens_per_slot - 1)
+                    // plan_tokens_per_slot
+                ).tolist()
                 smoke_records.append({
                     "global_step": global_step + 1,
                     "optimizer_step": optimizer_step_count + int(bool(metrics.get("optimizer_step"))),
@@ -922,9 +930,10 @@ def run_training(config, *, force_cpu: bool = False):
                     "schedule_seeds": {key: batch[key].tolist() for key in FormalStageBScheduleDataset.SEEDS if key in batch},
                     "group_mode": group_mode,
                     "plan_present": metrics["plan_present"],
-                    "plan_time_equal_token": metrics["plan_time_equal_token"],
+                    "plan_time_equal_token": metrics["plan_clock_on_diagonal"],
                     "plan_time_all_zero": metrics["plan_time_all_zero"],
                     "register_no_thinking_target": metrics["register_no_thinking_target"],
+                    "plan_mediation_rows": int(metrics["plan_mediation_rows"]),
                     "response_noise_sha256": metrics.get("response_noise_sha256"),
                     "token_time_sha256": metrics.get("token_time_sha256"),
                     "branch_sha256": metrics.get("branch_sha256"),
@@ -984,6 +993,9 @@ def run_training(config, *, force_cpu: bool = False):
                         "micro_steps": len(smoke_records), "rows_read": len(smoke_sample_ids),
                         "unique_sample_ids": len(set(smoke_sample_ids)),
                         "response_valid_tokens": response_tokens, "valid_plan_slots": plan_slots,
+                        "plan_mediation_rows": sum(
+                            row["plan_mediation_rows"] for row in smoke_records
+                        ),
                         "K_min": min(k_values), "K_mean": sum(k_values) / len(k_values),
                         "K_max": max(k_values),
                         "plan_padding_ratio": 1.0 - plan_slots / max(plan_capacity, 1),
@@ -1037,13 +1049,14 @@ def run_training(config, *, force_cpu: bool = False):
                     torch.stack([m["response_valid_tokens"] for m in train_metrics]).sum(),
                     torch.stack([m["plan_valid_slots"] for m in train_metrics]).sum(),
                     torch.stack([m["plan_capacity_slots"] for m in train_metrics]).sum(),
+                    torch.stack([m["plan_mediation_rows"] for m in train_metrics]).sum(),
                 ])
                 # Average each metric across DDP ranks before logging — done
                 # once per log_freq so we never sync on every train step.
                 if dist.is_available() and dist.is_initialized():
                     dist.all_reduce(stacked, op=dist.ReduceOp.SUM)
                     stacked = stacked / dist.get_world_size()
-                avg_loss, avg_l2, avg_ce, avg_plan, avg_grad, response_tokens, plan_slots, plan_capacity = (
+                avg_loss, avg_l2, avg_ce, avg_plan, avg_grad, response_tokens, plan_slots, plan_capacity, mediated_rows = (
                     float(x) for x in stacked.tolist()
                 )
                 # Running collator truncation totals (conditional Stage-B only; zero
@@ -1062,6 +1075,7 @@ def run_training(config, *, force_cpu: bool = False):
                     "plan": f"{avg_plan:.4f}",
                     "grad": f"{avg_grad:.4f}", "response_tokens": f"{int(response_tokens)}",
                     "plan_slots": f"{int(plan_slots)}",
+                    "mediated_rows": f"{int(mediated_rows)}",
                     "plan_padding": f"{1.0 - plan_slots / max(plan_capacity, 1.0):.4f}",
                     "cut_p/r/t": truncation_str,
                     "sps": f"{steps_per_sec:.1f}", "lr": f"{current_lr:.2e}",
@@ -1074,7 +1088,7 @@ def run_training(config, *, force_cpu: bool = False):
                         f"INFO - engine - Step {global_step}: loss={avg_loss:.4f}, "
                         f"l2={avg_l2:.4f}, ce={avg_ce:.4f}, plan={avg_plan:.4f}, "
                         f"grad={avg_grad:.4f}, response_tokens={int(response_tokens)}, "
-                        f"plan_slots={int(plan_slots)}, plan_padding="
+                        f"plan_slots={int(plan_slots)}, mediated_rows={int(mediated_rows)}, plan_padding="
                         f"{1.0 - plan_slots / max(plan_capacity, 1.0):.4f}, "
                         f"truncated(prompt/response/thinking)={truncation_str}, "
                         f"lr={current_lr:.2e}, steps/sec={steps_per_sec:.2f}"

@@ -71,7 +71,14 @@ class Config:
     num_plan_time_tokens: int = 4      # In-context time tokens carrying the plan clock t_plan
     plan_resampler: str = "frozen_pool"  # How the plan target x0_plan is built: "frozen_pool" | "learnable"
     plan_source: str = "frozen_pool"  # "frozen_pool" | "thinking_mlp_4to1"
-    plan_response_attention: str = "bidirectional"  # "bidirectional" | "causal_bottleneck"
+    plan_response_attention: str = "bidirectional"  # bidirectional | causal_bottleneck | prompt_causal_bottleneck
+    # Training-only intervention. On selected rows, non-plan queries cannot read
+    # prompt keys directly, so prompt information must reach the response through
+    # the prompt-aware plan subsystem. Zero preserves the existing path exactly.
+    plan_mediation_prob: float = 0.0
+    # Only mediate rows whose runtime plan clock is at least this value. This
+    # avoids forcing the response through a plan that is still mostly noise.
+    plan_mediation_min_t: float = 0.0
     max_plan_slots: int = None  # Runtime cap for variable thinking slots; defaults to num_plan_slots
     thinking_data_path: str = None
     thinking_resampler_checkpoint: str = None
@@ -107,6 +114,10 @@ class Config:
     save_optimizer_steps: list = None
     engineering_smoke_report: bool = False
     plan_loss_weight: float = 1.0      # lambda_plan: weight on the plan-stream velocity L2
+    # Extra emphasis on difficult low-t_plan rows. Zero preserves the original
+    # objective exactly; b applies 1 + b * (1 - t_plan)^2. The multiplier is
+    # deliberately not normalized away because formal Stage-B uses microbatch 1.
+    plan_low_t_loss_boost: float = 0.0
     # --- plan clock training distribution (2D time grid coverage) ---
     # Science-arm default: t_plan | t ~ U[0,1] plus an atom at t_plan=1. Conditional-uniform makes
     # the training density along ANY monotone trajectory equal to f(t)*1, so diagonal /
@@ -286,6 +297,12 @@ def apply_config_overrides(config: Config, overrides: list) -> Config:
                 converted_value = float(value_str)
             elif annotated_type == bool:
                 converted_value = value_str.lower() in ("true", "1", "yes")
+            elif annotated_type == list:
+                converted_value = yaml.safe_load(value_str)
+                if not isinstance(converted_value, list):
+                    raise ValueError(
+                        f"Config override '{field_name}' must be a YAML list"
+                    )
             else:
                 converted_value = value_str
         elif original_type == bool:
@@ -296,6 +313,12 @@ def apply_config_overrides(config: Config, overrides: list) -> Config:
             converted_value = float(value_str)
         elif original_type == str:
             converted_value = value_str
+        elif original_type == list:
+            converted_value = yaml.safe_load(value_str)
+            if not isinstance(converted_value, list):
+                raise ValueError(
+                    f"Config override '{field_name}' must be a YAML list"
+                )
         else:
             converted_value = value_str
 
