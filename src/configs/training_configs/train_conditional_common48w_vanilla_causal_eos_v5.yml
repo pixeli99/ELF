@@ -1,0 +1,6 @@
+# v5: prompt-causal plan attention (v4 finding) + EOS-supervised stopping (the ELF
+# conditional recipe, band of 64 tail positions) .
+base_config: train_conditional_common48w_vanilla_10k_v1.yml
+output_dir: outputs/elf_b_conditional_common48w_vanilla_causal_eos_v5
+pad_token: eos
+eos_tail_loss_tokens: 64

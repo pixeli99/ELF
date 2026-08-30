@@ -47,7 +47,12 @@ class GroupSpec:
 # The flag tuple each labelled group must carry, as
 # (plan_register_only, plan_done_frac, plan_diag_frac, plan_loss_weight).
 GROUP_PROTOCOL = {
-    "ordered": (False, 0.15, 0.0, 1.0),
+    # (register_only, plan_done_frac, plan_diag_frac, plan_loss_weight); None = free in (0, 1).
+    # ordered: the plan clock is drawn independently of the token clock and a fraction of
+    # rows train the response against the finished plan. That fraction is the one
+    # protocol knob an ordered run may choose (0.15 in v1-v4, 0.5 in v5); it must stay
+    # strictly inside (0, 1) so the plan denoiser still sees every clock.
+    "ordered": (False, None, 0.0, 1.0),
     "diagonal": (False, 0.0, 1.0, 1.0),
     "register": (True, 0.0, 0.0, 0.0),
 }
@@ -88,8 +93,11 @@ def assert_group_protocol(config) -> GroupSpec:
     if group.mode in GROUP_PROTOCOL:
         actual = (bool(config.plan_register_only), float(config.plan_done_frac),
                   float(config.plan_diag_frac), float(config.plan_loss_weight))
-        if actual != GROUP_PROTOCOL[group.mode]:
-            raise ValueError(f"group_mode={group.mode} protocol mismatch: {actual}")
+        expected = GROUP_PROTOCOL[group.mode]
+        for value, want in zip(actual, expected):
+            ok = (0.0 < value < 1.0) if want is None else (value == want)
+            if not ok:
+                raise ValueError(f"group_mode={group.mode} protocol mismatch: {actual}")
     return group
 
 

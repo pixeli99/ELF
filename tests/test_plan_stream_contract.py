@@ -163,7 +163,7 @@ class GroupValidationTests(unittest.TestCase):
     def test_exploratory_sweeps_are_not_blocked_by_the_structural_check(self):
         """resolve_group must stay permissive; only the launch path is strict."""
         config = _config("ordered")
-        config.plan_done_frac = 0.5
+        config.plan_diag_frac = 0.5   # an ordered run never puts the plan on the diagonal
         self.assertTrue(resolve_group(config).supervised)
         with self.assertRaises(ValueError):
             assert_group_protocol(config)
@@ -171,3 +171,32 @@ class GroupValidationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OrderedDoneFracTests(unittest.TestCase):
+    def test_ordered_may_choose_its_clean_plan_fraction(self):
+        from types import SimpleNamespace
+        from utils.plan_stream import assert_group_protocol
+        def cfg(done):
+            return SimpleNamespace(group_mode="ordered", num_plan_slots=4, max_plan_slots=4,
+                                   plan_register_only=False, plan_done_frac=done,
+                                   plan_diag_frac=0.0, plan_loss_weight=1.0)
+        for done in (0.15, 0.5):
+            self.assertEqual(assert_group_protocol(cfg(done)).mode, "ordered")
+        for done in (0.0, 1.0):
+            with self.assertRaises(ValueError):
+                assert_group_protocol(cfg(done))
+
+
+class ResponseLossMaskTests(unittest.TestCase):
+    def test_eos_tail_band(self):
+        import torch
+        from train_step import response_loss_mask
+        attention = torch.tensor([[1, 1, 1, 1, 0, 0, 0, 0, 0, 0]], dtype=torch.float32)
+        cond = torch.tensor([[1, 1, 0, 0, 0, 0, 0, 0, 0, 0]], dtype=torch.float32)
+        pad = response_loss_mask(attention, cond, "pad").tolist()[0]
+        self.assertEqual(pad, [0, 0, 1, 1, 0, 0, 0, 0, 0, 0])
+        full = response_loss_mask(attention, cond, "eos").tolist()[0]
+        self.assertEqual(full, [0, 0, 1, 1, 1, 1, 1, 1, 1, 1])
+        band = response_loss_mask(attention, cond, "eos", eos_tail_tokens=2).tolist()[0]
+        self.assertEqual(band, [0, 0, 1, 1, 1, 1, 0, 0, 0, 0])

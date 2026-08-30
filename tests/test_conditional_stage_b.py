@@ -213,6 +213,25 @@ class PlanTokenCapacityTests(unittest.TestCase):
                                                     num_plan_slots=16))
 
 
+class EosPaddingTests(unittest.TestCase):
+    def test_eos_pad_fills_the_tail_and_keeps_masks(self):
+        from types import SimpleNamespace
+        from utils.conditional_data import get_conditional_dataloader
+        tok = WordTokenizer()
+        cfg = SimpleNamespace(max_length=64, condition_max_tokens=32, max_plan_slots=16,
+                              num_plan_slots=16, plan_source="thinking_mlp_4to1", pad_token="eos")
+        loader, collator = get_conditional_dataloader(_rows(n=2), tok, cfg, batch_size=2)
+        self.assertEqual(collator.pad_token_id, tok.eos_token_id)
+        batch = next(iter(loader))
+        valid = batch["attention_mask"].bool()
+        self.assertTrue(bool((batch["input_ids"][~valid] == tok.eos_token_id).all()))
+        # the validity / condition masks still cover only prompt + response
+        self.assertLess(int(valid.sum()), valid.numel())
+        cfg.pad_token = "pad"
+        _, collator = get_conditional_dataloader(_rows(n=2), tok, cfg, batch_size=2)
+        self.assertEqual(collator.pad_token_id, tok.pad_token_id)
+
+
 class ConditionalStepTests(unittest.TestCase):
     def _run(self, mode, decoder_prob=0.0, plan_mediation_prob=0.0):
         config = _tiny_config(mode)

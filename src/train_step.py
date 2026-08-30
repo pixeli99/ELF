@@ -88,6 +88,24 @@ def _gate_plan_mediation_by_clock(mask, t_plan_input, minimum):
     return mask & (t_plan_input >= minimum)
 
 
+
+def response_loss_mask(attention_mask, cond_seq_mask, pad_token, eos_tail_tokens=0):
+    """Which positions the token losses cover.
+
+    pad_token="pad": only real response tokens. pad_token="eos": the EOS-filled tail is
+    supervised too, so the model learns to stop; `eos_tail_tokens` > 0 limits that to a
+    band right after the last real token. Condition (prompt) positions never count.
+    """
+    if pad_token == "pad":
+        loss_mask = attention_mask
+    elif eos_tail_tokens > 0:
+        lengths = attention_mask.sum(dim=1, keepdim=True)  # (B, 1) real tokens incl. prompt
+        positions = torch.arange(attention_mask.shape[1], device=attention_mask.device)[None, :]
+        loss_mask = (positions < lengths + eos_tail_tokens).to(attention_mask.dtype)
+    else:
+        loss_mask = torch.ones_like(attention_mask)
+    return loss_mask * (1 - cond_seq_mask)
+
 def train_step(
     state: TrainState,
     encoder: nn.Module,
@@ -187,11 +205,10 @@ def train_step(
     schedule_seed("response_noise_seed")
     noise = torch.randn(x0.shape, dtype=dtype, device=device)
 
-    if config.pad_token == "pad":
-        loss_mask = attention_mask
-    else:
-        loss_mask = torch.ones_like(attention_mask)
-    loss_mask = loss_mask * (1 - cond_seq_mask)  # (B, S), 1 = real target token
+    loss_mask = response_loss_mask(
+        attention_mask, cond_seq_mask, config.pad_token,
+        int(getattr(config, "eos_tail_loss_tokens", 0) or 0),
+    )  # (B, S), 1 = supervised target position
 
     cond_seq_mask = cond_seq_mask.unsqueeze(-1)  # (B, S, 1)
 

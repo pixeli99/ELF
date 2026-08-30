@@ -27,6 +27,7 @@ import numpy as np
 import torch
 
 from utils.logging_utils import log_for_0
+from utils.data_utils import get_pad_token_id
 from utils.thinking_tokenization import thinking_token_ids
 
 SEED_STREAMS = ("response_noise", "token_time", "branch", "plan_noise", "plan_time")
@@ -259,11 +260,16 @@ def get_conditional_dataloader(dataset, tokenizer, config, batch_size: int,
                                num_workers: int = 0, distributed: bool = False):
     """Sequential loader over a fixed schedule: the order IS the experiment."""
     capacity = plan_token_capacity_for(config)
+    # pad_token="eos" is the ELF conditional recipe (xsum / de-en): the window after
+    # the response is filled with EOS ids and train_step keeps those positions in
+    # the loss, which is what teaches the model to stop. The default "pad" leaves
+    # the tail out of the loss and every group then generates to the cap.
+    pad_token_id = get_pad_token_id(tokenizer, getattr(config, "pad_token", "pad"))
     collator = ConditionalCollator(
         tokenizer, max_length=config.max_length,
         condition_max_tokens=config.condition_max_tokens,
         max_plan_slots=int(getattr(config, "max_plan_slots", None) or config.num_plan_slots or 255),
-        plan_token_capacity=capacity,
+        plan_token_capacity=capacity, pad_token_id=pad_token_id,
     )
     sampler = None
     if distributed:
@@ -274,7 +280,8 @@ def get_conditional_dataloader(dataset, tokenizer, config, batch_size: int,
         persistent_workers=num_workers > 0,
     )
     log_for_0(f"Conditional loader: {len(dataset)} rows, max_length={config.max_length}, "
-              f"condition_max_tokens={config.condition_max_tokens}, plan_token_capacity={capacity}")
+              f"condition_max_tokens={config.condition_max_tokens}, plan_token_capacity={capacity}, "
+              f"pad_token={getattr(config, 'pad_token', 'pad')} (id {pad_token_id})")
     return loader, collator
 
 

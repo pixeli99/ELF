@@ -46,6 +46,10 @@ class Config:
     max_length: int = 128
     max_input_length: int = None  # Max length for conditioning input (e.g., prompt or encoder input); None = no limit
     pad_token: str = "pad"  # "pad" or "eos" - which token to use for padding
+    # With pad_token="eos", how many EOS positions after the response stay in the loss
+    # (0 = every tail position, the ELF xsum/de-en recipe). A short band teaches the
+    # model to stop without letting ~1600 trivial EOS targets swamp ~200 response tokens.
+    eos_tail_loss_tokens: int = 0
 
     # Tokenizer
     tokenizer_name: str = None  # Defaults to encoder_model_name if not set
