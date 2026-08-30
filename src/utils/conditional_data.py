@@ -250,7 +250,9 @@ def plan_token_capacity_for(config) -> int:
     slots = int(getattr(config, "max_plan_slots", None) or config.num_plan_slots or 255)
     if getattr(config, "plan_source", None) == "span_vae":
         from modules.plan_vae import K_MAX, SPAN
-        if slots != K_MAX:
+        # A vanilla run (no plan stream) still tokenizes the gold thinking for the
+        # batch layout; only a plan-carrying run must match the VAE's slot count.
+        if int(getattr(config, "num_plan_slots", 0) or 0) > 0 and slots != K_MAX:
             raise ValueError(f"span_vae plan source needs max_plan_slots == {K_MAX}, got {slots}")
         return SPAN * K_MAX
     return PLAN_GROUP_SIZE * slots

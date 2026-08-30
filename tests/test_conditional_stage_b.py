@@ -211,6 +211,9 @@ class PlanTokenCapacityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             plan_token_capacity_for(SimpleNamespace(plan_source="span_vae", max_plan_slots=16,
                                                     num_plan_slots=16))
+        # vanilla: no plan stream, slot count is irrelevant
+        self.assertEqual(plan_token_capacity_for(SimpleNamespace(
+            plan_source="span_vae", max_plan_slots=0, num_plan_slots=0)), 1024)
 
 
 class EosPaddingTests(unittest.TestCase):
