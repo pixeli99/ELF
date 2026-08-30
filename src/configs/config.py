@@ -102,6 +102,11 @@ class Config:
     conditional_master_seed: int = 42  # with the row count, this IS the schedule
     conditional_verify_shards: bool = True
     condition_max_tokens: int = 1024
+    # Ceiling experiment: put the gold thinking into the clean condition prefix
+    # (prompt[:condition_max_tokens] + thinking[:condition_thinking_max_tokens]).
+    # Not a deployable protocol; measures how much the reasoning text could help.
+    condition_includes_thinking: bool = False
+    condition_thinking_max_tokens: int = 1024
     # --- Dolma backbone pretraining (streaming jsonl.zst) ---
     dolma_data_dir: str = None
     dolma_min_tokens: int = 64

@@ -235,6 +235,25 @@ class EosPaddingTests(unittest.TestCase):
         self.assertEqual(collator.pad_token_id, tok.pad_token_id)
 
 
+class ThinkingPrefixTests(unittest.TestCase):
+    def test_thinking_rides_in_the_condition_prefix(self):
+        tok = WordTokenizer()
+        rows = _rows(n=1, prompt_words=3, thinking_words=5, response_words=2)
+        plain = ConditionalCollator(tok, max_length=64, condition_max_tokens=16, max_plan_slots=16)(rows)
+        ceiling = ConditionalCollator(tok, max_length=64, condition_max_tokens=16, max_plan_slots=16,
+                                      condition_includes_thinking=True,
+                                      condition_thinking_max_tokens=32)(rows)
+        self.assertEqual(int(plain["cond_seq_mask"].sum()), 3)
+        self.assertEqual(int(ceiling["cond_seq_mask"].sum()), 3 + 6)     # 5 words + EOS
+        # the response itself is unchanged and still follows the prefix
+        p_resp = plain["input_ids"][0][3:3 + 3].tolist()
+        c_resp = ceiling["input_ids"][0][9:9 + 3].tolist()
+        self.assertEqual(p_resp, c_resp)
+        with self.assertRaises(ValueError):
+            ConditionalCollator(tok, max_length=64, condition_max_tokens=32, max_plan_slots=16,
+                                condition_includes_thinking=True, condition_thinking_max_tokens=32)
+
+
 class ConditionalStepTests(unittest.TestCase):
     def _run(self, mode, decoder_prob=0.0, plan_mediation_prob=0.0):
         config = _tiny_config(mode)

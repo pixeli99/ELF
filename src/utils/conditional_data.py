@@ -151,12 +151,19 @@ class ConditionalCollator:
 
     def __init__(self, tokenizer, max_length: int = 2048, condition_max_tokens: int = 1024,
                  max_plan_slots: int = 255, pad_token_id: Optional[int] = None,
-                 plan_token_capacity: Optional[int] = None):
+                 plan_token_capacity: Optional[int] = None,
+                 condition_includes_thinking: bool = False,
+                 condition_thinking_max_tokens: int = 1024):
         if condition_max_tokens >= max_length:
             raise ValueError("condition_max_tokens must leave room for a response")
         self.tokenizer = tokenizer
         self.max_length = int(max_length)
         self.condition_max_tokens = int(condition_max_tokens)
+        self.condition_includes_thinking = bool(condition_includes_thinking)
+        self.condition_thinking_max_tokens = int(condition_thinking_max_tokens)
+        if self.condition_includes_thinking and \
+                self.condition_max_tokens + self.condition_thinking_max_tokens >= self.max_length:
+            raise ValueError("prompt + thinking condition must leave room for a response")
         self.max_plan_slots = int(max_plan_slots)
         # How many gold-thinking tokens the plan target may consume. The legacy
         # 4-to-1 MLP path derives it from the slot count; the span-VAE path must
@@ -198,6 +205,9 @@ class ConditionalCollator:
             if len(prompt) > self.condition_max_tokens:
                 prompt = prompt[:self.condition_max_tokens]
                 cut["prompt_truncated"][index] = 1
+            if self.condition_includes_thinking:
+                # ceiling protocol: the gold thinking rides in the clean prefix, after the prompt
+                prompt = prompt + thinking[:self.condition_thinking_max_tokens]
             room = self.max_length - len(prompt)
             if len(response) > room:
                 response = response[:room]
@@ -272,6 +282,8 @@ def get_conditional_dataloader(dataset, tokenizer, config, batch_size: int,
         condition_max_tokens=config.condition_max_tokens,
         max_plan_slots=int(getattr(config, "max_plan_slots", None) or config.num_plan_slots or 255),
         plan_token_capacity=capacity, pad_token_id=pad_token_id,
+        condition_includes_thinking=bool(getattr(config, "condition_includes_thinking", False)),
+        condition_thinking_max_tokens=int(getattr(config, "condition_thinking_max_tokens", 1024)),
     )
     sampler = None
     if distributed:
