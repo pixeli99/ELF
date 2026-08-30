@@ -90,8 +90,18 @@ SPAN = 1024 // K_MAX      # 16 tokens per slot, absolute spans
 
 
 class PlanVAE(nn.Module):
-    def __init__(self):
+    """Thinking latents -> K slots -> thinking latents.
+
+    span_decode adds a direct linear path from slot k to the WIDTH channels of its own
+    SPAN positions, in parallel with the cross-attention decoder. Without it the decoder
+    has to rediscover "position i belongs to slot i // SPAN" through attention, and it
+    does so badly: a per-span PCA at the identical 8192-float budget keeps 44% of gold
+    numeric answers through a round trip while the attention-only v7 keeps 21%.
+    """
+
+    def __init__(self, span_decode: bool = False):
         super().__init__()
+        self.span_decode = bool(span_decode)
         self.pool_in = nn.Linear(WIDTH, D_MODEL)
         self.slot_pos = nn.Parameter(torch.randn(1, K_MAX, D_MODEL) * 0.02)
         self.enc = nn.ModuleList([SlotBlock() for _ in range(2)])
@@ -112,6 +122,9 @@ class PlanVAE(nn.Module):
         self.pos = nn.Parameter(torch.randn(1, 1024, D_MODEL) * 0.02)
         self.dec = nn.ModuleList([Block(False) for _ in range(2)])
         self.out = nn.Linear(D_MODEL, WIDTH)
+        if self.span_decode:
+            self.span_out = nn.Linear(Z_DIM, SPAN * WIDTH)
+            nn.init.zeros_(self.span_out.bias)
         self.aux = nn.Sequential(nn.Linear(D_MODEL, 1024), nn.GELU(),
                                  nn.Linear(1024, WIDTH))
 
@@ -138,7 +151,11 @@ class PlanVAE(nn.Module):
             p = block(p, s, None)
         gate = active.unsqueeze(-1).float()
         s_active = (s * gate).sum(1) / gate.sum(1).clamp_min(1)
-        return self.out(p), self.aux(s_active)
+        recon = self.out(p)
+        if self.span_decode:
+            direct = self.span_out(z).view(z.shape[0], z.shape[1], SPAN, WIDTH)
+            recon = recon + direct.reshape(z.shape[0], z.shape[1] * SPAN, WIDTH)[:, :length]
+        return recon, self.aux(s_active)
 
 
 
@@ -154,7 +171,7 @@ def load_frozen_plan_vae(artifact_path, device="cpu", expected_sha256=None):
     artifact = torch.load(artifact_path, map_location="cpu", weights_only=True)
     if int(artifact["k_max"]) != K_MAX or int(artifact["z_dim"]) != Z_DIM:
         raise ValueError("plan VAE artifact dimensions do not match this module")
-    model = PlanVAE()
+    model = PlanVAE(span_decode=bool(artifact.get("span_decode", False)))
     model.load_state_dict(artifact["state_dict"], strict=True)
     model = model.to(device).eval().requires_grad_(False)
     meta = {k: v for k, v in artifact.items() if k != "state_dict"}

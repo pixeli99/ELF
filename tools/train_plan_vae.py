@@ -39,6 +39,8 @@ def parse_args():
     ap.add_argument("--kl-warmup", type=int, default=4000)
     ap.add_argument("--eval-rows", type=int, default=1024)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--span-decode", action="store_true",
+                    help="add the direct slot->own-span linear decode path")
     ap.add_argument("--out", required=True)
     return ap.parse_args()
 
@@ -70,7 +72,7 @@ def main():
         ids, mask = enc["input_ids"].to(dev), enc["attention_mask"].to(dev).bool()
         return t5(input_ids=ids, attention_mask=mask).float() / LATENT_STD, mask
 
-    model = PlanVAE().to(dev)
+    model = PlanVAE(span_decode=args.span_decode).to(dev)
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: min(1.0, s / 500) * max(0.05, 1 - s / args.steps))
@@ -142,7 +144,7 @@ def main():
             (out / f"eval_{step}.json").write_text(json.dumps(report, indent=2))
     torch.save({"state_dict": model.state_dict(), "beta": args.beta, "k_max": K_MAX,
                 "z_dim": Z_DIM, "free_bits": args.free_bits, "lambda": args.aux_weight,
-                "steps": args.steps}, out / "final.pt")
+                "steps": args.steps, "span_decode": args.span_decode}, out / "final.pt")
     print("DONE", flush=True)
 
 
