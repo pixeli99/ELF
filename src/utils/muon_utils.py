@@ -7,7 +7,7 @@ import torch.nn as nn
 from utils.logging_utils import log_for_0
 
 
-def muon_with_aux_adam(model: nn.Module, lr: float, replicated_across_ranks: bool = False):
+def muon_with_aux_adam(model: nn.Module, lr: float):
     """Muon optimizer matching `optax.contrib.muon(learning_rate=lr_schedule)`.
 
     Params are partitioned by `ndim == 2 -> Muon`, else Nesterov-Adam (b1=0.9,
@@ -96,8 +96,7 @@ def muon_with_aux_adam(model: nn.Module, lr: float, replicated_across_ranks: boo
         else:
             adam_params.append(p)
 
-    distributed = (dist.is_available() and dist.is_initialized()
-                   and not replicated_across_ranks)
+    distributed = dist.is_available() and dist.is_initialized()
     base_cls = MuonWithAuxAdam if distributed else SingleDeviceMuonWithAuxAdam
 
     class _SafeMuonAuxAdam(base_cls):

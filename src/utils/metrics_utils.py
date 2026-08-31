@@ -232,9 +232,4 @@ class Metrics:
             "ppl": float(self.gen_ppl.compute()),
             "per_sample_ppl": per_sample_ppl,
             "mean_entropy": sum(per_sample_entropy) / len(per_sample_entropy),
-            # Additive diagnostics for paired evaluation. These are the exact
-            # accumulators already used above; no metric formula is duplicated.
-            "per_sample_nll_sum": per_sample_nll_sum.tolist(),
-            "per_sample_token_count": per_sample_token_count.tolist(),
-            "per_sample_token_frequency_entropy": per_sample_entropy,
         }

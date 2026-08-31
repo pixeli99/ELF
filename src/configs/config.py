@@ -22,18 +22,6 @@ class SamplingConfig:
     self_cond_cfg_scales: list = [1.0]
     time_schedule: str = "logit_normal"  # 'logit_normal' or 'uniform'
     sde_gamma: float = 0.0  # Per-step SDE churn fraction; 0.0 -> pure ODE. Used when sampling_method == "sde".
-    # Ordered ELF two-clock sampling (only used when the model has a plan stream):
-    #   "diagonal"       -> t_plan == t_tok
-    #   "planning_first" -> t_plan = min(1, plan_lead_alpha * t_tok)  (plan clock leads with
-    #                       alpha>1; alpha<1 gives a *lagging* plan — the falsification arm)
-    #   "null"           -> t_plan == 0 forever (plan stays pure noise; register / no-plan probe)
-    plan_trajectory: str = "diagonal"
-    plan_lead_alpha: float = 2.0
-    # Plan grid-CFG: guide the token velocity by extrapolating the plan-conditioned prediction
-    # against a null forward at (x_plan = the run's initial noise plan, t_plan = 0).
-    # 1.0 disables (no extra forward). Needs no dropout training: the t_plan≈0 region is
-    # covered by the conditional-uniform plan clock during training.
-    plan_cfg_scale: float = 1.0
 
 
 # ============================================
@@ -46,10 +34,6 @@ class Config:
     max_length: int = 128
     max_input_length: int = None  # Max length for conditioning input (e.g., prompt or encoder input); None = no limit
     pad_token: str = "pad"  # "pad" or "eos" - which token to use for padding
-    # With pad_token="eos", how many EOS positions after the response stay in the loss
-    # (0 = every tail position, the ELF xsum/de-en recipe). A short band teaches the
-    # model to stop without letting ~1600 trivial EOS targets swamp ~200 response tokens.
-    eos_tail_loss_tokens: int = 0
 
     # Tokenizer
     tokenizer_name: str = None  # Defaults to encoder_model_name if not set
@@ -68,96 +52,6 @@ class Config:
     num_model_mode_tokens: int = 4  # If > 0, prepend learnable model-mode tokens that signal decoding mode
     attn_dropout: float = 0.0
     proj_dropout: float = 0.0
-
-    # Planning stream (Ordered ELF)
-    # num_plan_slots = 0 -> vanilla ELF (no plan stream); all existing configs are unchanged.
-    num_plan_slots: int = 0            # K planning slots (second stream); 0 disables the plan stream
-    num_plan_time_tokens: int = 4      # In-context time tokens carrying the plan clock t_plan
-    plan_resampler: str = "frozen_pool"  # How the plan target x0_plan is built: "frozen_pool" | "learnable"
-    plan_source: str = "frozen_pool"  # "frozen_pool" | "span_vae"
-    plan_response_attention: str = "bidirectional"  # bidirectional | causal_bottleneck | prompt_causal_bottleneck
-    # Training-only intervention. On selected rows, non-plan queries cannot read
-    # prompt keys directly, so prompt information must reach the response through
-    # the prompt-aware plan subsystem. Zero preserves the existing path exactly.
-    plan_mediation_prob: float = 0.0
-    # Only mediate rows whose runtime plan clock is at least this value. This
-    # avoids forcing the response through a plan that is still mostly noise.
-    plan_mediation_min_t: float = 0.0
-    max_plan_slots: int = None  # Runtime cap for variable thinking slots; defaults to num_plan_slots
-    thinking_data_path: str = None
-    thinking_split: str = "80_10_10"
-    thinking_plan_add_special_tokens: bool = True
-    formal_stage_b_manifest: str = None
-    formal_stage_b_manifest_sha256: str = None
-    formal_stage_b_schedule: str = None
-    formal_stage_b_schedule_sha256: str = None
-    # --- conditional Stage-B (prompt + thinking plan + response) ---
-    # The prompt shares the `max_length` window with the response, so
-    # condition_max_tokens is the guarantee that a response always has room:
-    # with 1024 / 2048 the package's longest response (1006 tokens) always fits.
-    conditional_train_manifest: str = None
-    conditional_train_manifest_sha256: str = None
-    conditional_rows: int = None       # schedule length; None uses the whole package
-    conditional_master_seed: int = 42  # with the row count, this IS the schedule
-    conditional_verify_shards: bool = True
-    condition_max_tokens: int = 1024
-    # Paired math package (tools/build_paired_math.py): prompt / reasoning / short answer.
-    # paired_math_target picks what the window has to hold: "answer" for the no-reasoning
-    # and plan arms, "cot_answer" for the explicit-reasoning arm.
-    paired_math_dir: str = None
-    paired_math_target: str = "answer"
-    # Ceiling experiment: put the gold thinking into the clean condition prefix
-    # (prompt[:condition_max_tokens] + thinking[:condition_thinking_max_tokens]).
-    # Not a deployable protocol; measures how much the reasoning text could help.
-    condition_includes_thinking: bool = False
-    condition_thinking_max_tokens: int = 1024
-    # --- Dolma backbone pretraining (streaming jsonl.zst) ---
-    # --- frozen Plan-VAE (plan_source: span_vae) ---
-    plan_vae_artifact: str = None
-    plan_vae_artifact_sha256: str = None
-    group_mode: str = "ordered"  # ordered | diagonal | register | vanilla
-    frozen_thinking_encoder: str = None
-    thinking_whitener_artifact: str = None
-    frozen_stage_a_checkpoint_sha256: str = None
-    frozen_encoder_sha256: str = None
-    whitening_manifest_sha256: str = None
-    save_optimizer_steps: list = None
-    engineering_smoke_report: bool = False
-    plan_loss_weight: float = 1.0      # lambda_plan: weight on the plan-stream velocity L2
-    # Extra emphasis on difficult low-t_plan rows. Zero preserves the original
-    # objective exactly; b applies 1 + b * (1 - t_plan)^2. The multiplier is
-    # deliberately not normalized away because formal Stage-B uses microbatch 1.
-    plan_low_t_loss_boost: float = 0.0
-
-    # Skip the formal four-group protocol assert at launch. Only for diagnostics that
-    # deliberately leave the protocol (e.g. plan_done_frac = 1, a response that always
-    # sees the clean gold plan); such runs must never appear in a group comparison table.
-    diagnostic_run: bool = False
-    # --- plan clock training distribution (2D time grid coverage) ---
-    # Science-arm default: t_plan | t ~ U[0,1] plus an atom at t_plan=1. Conditional-uniform makes
-    # the training density along ANY monotone trajectory equal to f(t)*1, so diagonal /
-    # planning-first / lagging comparisons are trained equally (no coverage confound). The atom is
-    # needed because saturating lead trajectories DWELL at t_plan=1 for a finite fraction of steps
-    # (measure zero under any continuous distribution).
-    plan_time_schedule: str = "uniform"  # "uniform" (science arm) | "logit_normal" (match token clock; systems arm)
-    plan_done_frac: float = 0.15       # Atom P(t_plan = 1): trains "denoise tokens given a finished plan"
-    plan_diag_frac: float = 0.0        # Fraction forced onto t_plan == t_tok. Keep 0 for the science arm
-                                       # (a diagonal atom would bias trajectory comparisons); >0 is a
-                                       # systems knob for diagonal-specialist training (1.0 = rung 3)
-    # --- frozen target-maker whitening (fit once before training, stored as model buffers) ---
-    # The raw mean-pool target is badly scaled: on real t5-small latents its std is ~0.47 (info-
-    # bearing centered part ~0.28) vs ~0.84 for tokens, under a shared noise scale — the plan would
-    # resolve LATER than tokens in SNR terms on the diagonal. Whitening bakes the fix into the
-    # frozen target maker (cf. LADD's unit-norm clamp / CCDD's SNR matching).
-    plan_whiten: str = "zscore"        # "none" | "zscore" (per-dim standardize) | "pca" (whiten + project)
-    plan_target_dim: int = 128         # PCA output dim per slot (only used when plan_whiten == "pca")
-    plan_whiten_batches: int = 64      # Batches for the pre-training stats pass
-    # --- register control arm ---
-    # True register control: slots are structurally present but carry NO data-derived information
-    # (input is pure noise at t_plan = 0) and get NO plan loss. Separates the "extra computation
-    # tokens help" (ViT-registers) effect from the planning effect. NOTE: plan_loss_weight = 0.0
-    # alone is NOT a register control — the noised pooled target still leaks in via the input.
-    plan_register_only: bool = False
 
     # Denoiser objective
     denoiser_p_mean: float = 0.8
@@ -182,7 +76,6 @@ class Config:
     epochs: int = 200
     warmup_epochs: float = None
     warmup_steps: int = 5000
-    warmup_optimizer_steps: int = None  # Explicit optimizer-step warmup; overrides micro-step fields.
     batch_size: int = None
     global_batch_size: int = 512
     lr: float = None
@@ -197,10 +90,6 @@ class Config:
     use_bf16: bool = True  # Use CUDA BF16 autocast for training/eval forward passes.
     use_compile: bool = False  # Wrap the eval/sampling model in torch.compile.
     gradient_checkpointing: bool = False  # Save activation memory by recomputing ELF blocks during backward.
-    ddp_find_unused_parameters: bool = False
-    ddp_replicated_optimizer: bool = False  # Full optimizer state on every rank for exact resume.
-    max_train_steps: int = -1  # Debug only; if >0 stop training after this many global training steps.
-    max_optimizer_steps: int = None
 
     # EMA
     ema_decay1: float = 0.9999
@@ -210,10 +99,6 @@ class Config:
     # Sampling configs sweep (list of SamplingConfig objects, loaded from YAML)
     sampling_configs: list = [SamplingConfig()]
     num_samples: int = 100
-    # Eval-only paired trajectory ablation. When enabled, trajectories with the same
-    # seed/rank/step-count/batch use the same RNG stream; trajectory identity is excluded.
-    paired_trajectory_eval: bool = False
-    paired_eval_base_seed: int = 42
 
     # PPL Evaluation
     online_eval: bool = True  # Enable PPL evaluation for generated samples
@@ -230,7 +115,6 @@ class Config:
     output_dir: str = "./output_dir"
     hf_repo_id: str = None  # Optional HF repo id to mirror local outputs/checkpoints.
     resume: str = None
-    init_from: str = None  # Optional model-only warm-start checkpoint/HF id; does not restore optimizer/step.
 
     # Wandb
     use_wandb: bool = False
@@ -253,11 +137,6 @@ def load_config_from_yaml(path: str) -> Config:
 
     with open(path, "r") as f:
         cfg_dict = yaml.safe_load(f) or {}
-    base_path = cfg_dict.pop("base_config", None)
-    if base_path:
-        if not os.path.isabs(base_path):
-            base_path = os.path.normpath(os.path.join(os.path.dirname(path), base_path))
-        config = load_config_from_yaml(base_path)
 
     for key, value in cfg_dict.items():
         if key == "sampling_configs":
@@ -312,12 +191,6 @@ def apply_config_overrides(config: Config, overrides: list) -> Config:
                 converted_value = float(value_str)
             elif annotated_type == bool:
                 converted_value = value_str.lower() in ("true", "1", "yes")
-            elif annotated_type == list:
-                converted_value = yaml.safe_load(value_str)
-                if not isinstance(converted_value, list):
-                    raise ValueError(
-                        f"Config override '{field_name}' must be a YAML list"
-                    )
             else:
                 converted_value = value_str
         elif original_type == bool:
@@ -328,12 +201,6 @@ def apply_config_overrides(config: Config, overrides: list) -> Config:
             converted_value = float(value_str)
         elif original_type == str:
             converted_value = value_str
-        elif original_type == list:
-            converted_value = yaml.safe_load(value_str)
-            if not isinstance(converted_value, list):
-                raise ValueError(
-                    f"Config override '{field_name}' must be a YAML list"
-                )
         else:
             converted_value = value_str
 

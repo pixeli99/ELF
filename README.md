@@ -1,59 +1,150 @@
-# Ordered ELF Thinking-Plan Unconditional
+# PyTorch ELF
 
-This branch is the code-only handoff of the formal **unconditional** Ordered ELF thinking-plan pipeline. Generation currently receives no instruction or prompt. Training data consists of paired `thinking` and `response` records, but only the response is generated.
+PyTorch version of [ELF: Embedded Language Flows](https://arxiv.org/abs/2605.10938).
 
-## Formal pipeline
+## Installation
 
-Stage A constructs a variable-length plan:
+Create a conda environment named `elf` and install the dependencies:
 
-```text
-thinking
--> frozen T5-small latent sequence
--> adjacent groups of four valid tokens (zero-pad only the final group)
--> frozen nonlinear 2048 -> 6144 -> 512 MLP encoder
--> train-only diagonal whitener
--> plan [B, K, 512], K = ceil(valid_thinking_tokens / 4)
+```bash
+conda create -n elf python=3.10 -y
+conda activate elf
+pip install -r requirements.txt
 ```
 
-Stage B jointly models the variable-K plan stream and response-token stream with separate masks and clocks `t_plan` and `t`. Response generation is unconditional.
+Then log in to WandB to track your experiments if needed:
 
-| Group | Meaning |
-|---|---|
-| Ordered | Real compressed-thinking plan, variable K; conditional `t_plan` with `plan_done_frac=0.15`. |
-| Diagonal | Same real plan and masks; forces `t_plan=t`. |
-| Register | Same K and plan-mask compute slots, but fixed Gaussian registers; no thinking plan or plan loss. |
-| Vanilla | No plan tensor, plan mask, plan clock, or plan-token region. |
+```bash
+wandb login YOUR_WANDB_API_KEY
+```
 
-## Entrypoints
+## Converted Checkpoints
 
-- Stage-A MLP: `scripts/run_thinking_mlp_4to1.sh`
-- Stage-A export: `tools/export_frozen_thinking_mlp.py`
-- Train-only whitener: `scripts/run_formal_thinking_whitener.sh`
-- Common schedule: `tools/build_stage_b_common_schedule.py`
-- Heldout split builder: `tools/build_stage_b_heldout_manifests.py`
-- Exact-K Oracle donor mapping: `tools/build_stage_b_oracle_donor_mapping.py`
-- Four Stage-B groups: `scripts/run_stage_b_common80k_four_groups.sh`
-- Fourteen-arm generation evaluation: `scripts/run_stage_b_common80k_generation.sh`
-- Stable serial Oracle matched/shuffled probe: `scripts/run_stage_b_oracle_serial.sh`
+We provide PyTorch-converted versions of the official JAX checkpoints on HuggingFace:
 
-Paths in configs are repository-relative examples. Launchers accept environment overrides such as `PYTHON_BIN`, `HF_HOME`, `OUTPUT_ROOT`, `STAGE_A_ARTIFACT_DIR`, `COMMON_SCHEDULE`, `STAGE_B_RUN_ROOT`, `STAGE_B_SPLIT_MANIFEST`, `STAGE_B_SHAPE_DIR`, and `GPT2_LARGE_SNAPSHOT`. Artifact SHA locks remain part of the formal protocol.
+| Model | Task | Params | HuggingFace Repo |
+| --- | --- | --- | --- |
+| ELF-B | OpenWebText (unconditional) | 105M | [embedded-language-flows/ELF-B-owt-torch](https://huggingface.co/embedded-language-flows/ELF-B-owt-torch) |
+| ELF-M | OpenWebText (unconditional) | 342M | [embedded-language-flows/ELF-M-owt-torch](https://huggingface.co/embedded-language-flows/ELF-M-owt-torch) |
+| ELF-L | OpenWebText (unconditional) | 652M | [embedded-language-flows/ELF-L-owt-torch](https://huggingface.co/embedded-language-flows/ELF-L-owt-torch) |
+| ELF-B | XSum (summarization) | 105M | [embedded-language-flows/ELF-B-xsum-torch](https://huggingface.co/embedded-language-flows/ELF-B-xsum-torch) |
+| ELF-B | WMT14 De-En (translation) | 105M | [embedded-language-flows/ELF-B-de-en-torch](https://huggingface.co/embedded-language-flows/ELF-B-de-en-torch) |
 
-## External evaluation inputs
+These are pulled automatically via `--checkpoint_path <hf-repo-id>` — no manual download needed.
 
-Formal generation does not run without externally built, provenance-only inputs. `tools/build_stage_b_heldout_manifests.py` creates Dev/Test and a no-gold generation-shape manifest; `tools/build_stage_b_oracle_donor_mapping.py` creates the privileged exact-K Oracle donor mapping. Their data products are deliberately not committed. The generation-shape schema contains only `eval_id`, source audit hash, K/mask lengths, response length/mask length, and deterministic noise seeds. The Oracle mapping contains recipient/donor identities, K, hashes, and source pointers needed to retrieve **thinking only**; it must not expose gold response text to generation.
+## Reference Results
 
-## Conditional handoff
+The PyTorch port targets parity with the JAX reference numbers from the
+paper. Small differences (≲1 PPL, ≲0.5 BLEU/ROUGE) are expected due to bf16
+vs. JAX TPU numerics and sampling stochasticity.
 
-Do not add an instruction encoder from scratch before auditing the inherited conditional path. Upstream already supports `condition_input_ids`, condition masks, and a clean frozen-T5 prefix in `data_utils.py`, `train_step.py`, `generation.py`, and `generation_utils.py`. The next implementation should attach variable-K thinking plans to that path:
+**Unconditional generation (OpenWebText), expected:**
 
-- instruction/prompt is available at both training and test time;
-- gold thinking is used only to construct the training plan target and is never a test-time input;
-- all four groups receive exactly the same instruction condition;
-- Vanilla is instruction + response with no plan;
-- Register is instruction + fixed Gaussian plan + response;
-- Ordered is instruction + evolving plan + response;
-- Diagonal is instruction + diagonal-clock plan + response.
+| Model | Sampling | Gen. PPL ↓ | Entropy ↑ |
+| --- | --- | --- | --- |
+| ELF-B (105M) | 32-step SDE | 24.1 | 5.15 |
+| ELF-M (342M) | 64-step SDE | 21.7 | 5.18 |
+| ELF-L (652M) | 64-step SDE | 23.3 | 5.28 |
 
-All four groups must be retrained. WMT uses BLEU and XSum uses ROUGE. GSM8K/MATH require a separate answer parser and exact/appropriate accuracy evaluator; the unconditional GPT-2 metric path is not sufficient. Do not treat this unconditional checkpoint as conditionally trained.
+Gen. PPL is computed under a frozen GPT-2 Large; entropy is unigram entropy
+over the generated tokens. Default sampling configs
+(`src/configs/sampling_configs/uncond_sampling_configs.yml`) use SC-CFG=3 and
+γ=1.5 (32-step) or γ=1.0 (64-step).
 
-No dataset, manifest instance, checkpoint, model weight, generation output, or formal result is included. See `CODE_GUIDE.md` for the file-level map and `absolute_path_audit.txt` for removed machine bindings.
+**Conditional generation (ELF-B), expected on the validation set:**
+
+| Task | Metric | Reference (paper, test) | Validation |
+| --- | --- | --- | --- |
+| WMT14 De-En | BLEU ↑ | 26.4 | ≈ 26.7 |
+| XSum | ROUGE-1 ↑ | 36.0 | ≈ 36.3 |
+| XSum | ROUGE-2 ↑ | 12.2 | ≈ 12.5 |
+| XSum | ROUGE-L ↑ | 27.8 | ≈ 28.1 |
+
+Default conditional sampling
+(`src/configs/sampling_configs/cond_sampling_configs.yml`): 64-step ODE,
+CFG=2, SC-CFG=1.
+
+The paper numbers were computed on TPU v5p-64; numbers from this PyTorch port
+on 8× L40S / H200 should land within sampling noise (typically <1 PPL or
+<0.5 metric points).
+
+## Training
+
+Launch single-GPU training:
+
+```bash
+bash scripts/launch.sh train src/configs/training_configs/train_owt_ELF-B.yml
+```
+
+Launch multi-GPU (single-host) training:
+
+```bash
+NGPU=8 bash scripts/launch.sh train src/configs/training_configs/train_owt_ELF-B.yml
+```
+
+Available training configs:
+
+- `src/configs/training_configs/train_owt_ELF-B.yml` — ELF-B on OpenWebText
+- `src/configs/training_configs/train_owt_ELF-M.yml` — ELF-M on OpenWebText
+- `src/configs/training_configs/train_owt_ELF-L.yml` — ELF-L on OpenWebText
+- `src/configs/training_configs/train_de-en_ELF-B.yml` — WMT14 De-En machine translation
+- `src/configs/training_configs/train_xsum_ELF-B.yml` — XSum abstractive summarization
+
+**Estimated wall-clock:** ~4 h per epoch on 8× H200 (OpenWebText, ELF-B,
+global batch size 512, bf16). The default ELF-B OWT run is 5 epochs.
+
+## Evaluation
+
+Run evaluation against the converted checkpoints on HuggingFace. We recommend
+passing `use_bf16=true` (matches the bf16 autocast used at training time) and
+`use_compile=true` (wraps the eval model in `torch.compile`) for a ~3–4×
+speedup on consumer GPUs:
+
+**Unconditional generation (OpenWebText):**
+
+```bash
+# ELF-B (105M)
+NGPU=8 bash scripts/launch.sh eval src/configs/training_configs/train_owt_ELF-B.yml \
+    --checkpoint_path embedded-language-flows/ELF-B-owt-torch \
+    --config_override use_bf16=true --config_override use_compile=true
+
+# ELF-M (342M)
+NGPU=8 bash scripts/launch.sh eval src/configs/training_configs/train_owt_ELF-M.yml \
+    --checkpoint_path embedded-language-flows/ELF-M-owt-torch \
+    --config_override use_bf16=true --config_override use_compile=true
+
+# ELF-L (652M)
+NGPU=8 bash scripts/launch.sh eval src/configs/training_configs/train_owt_ELF-L.yml \
+    --checkpoint_path embedded-language-flows/ELF-L-owt-torch \
+    --config_override use_bf16=true --config_override use_compile=true
+```
+
+**Conditional generation (XSum / WMT14 De-En):**
+
+```bash
+# XSum (ROUGE)
+NGPU=8 bash scripts/launch.sh eval src/configs/training_configs/train_xsum_ELF-B.yml \
+    --checkpoint_path embedded-language-flows/ELF-B-xsum-torch \
+    --config_override use_bf16=true --config_override use_compile=true
+
+# WMT14 De-En (BLEU)
+NGPU=8 bash scripts/launch.sh eval src/configs/training_configs/train_de-en_ELF-B.yml \
+    --checkpoint_path embedded-language-flows/ELF-B-de-en-torch \
+    --config_override use_bf16=true --config_override use_compile=true
+```
+
+### Eval config flags
+
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `use_bf16` | `true` | Wraps the sampling forward in `torch.amp.autocast('cuda', dtype=bfloat16)`. Mirrors the training-time precision; output heads stay fp32. |
+| `use_compile` | `false` | Wraps the eval model in `torch.compile`. First batch is slower due to tracing; subsequent batches run materially faster. |
+
+Both flags are also editable in the YAML config under the same names. You can also run the standalone
+PPL script afterwards:
+
+```bash
+python scripts/eval_ppl.py \
+    --input outputs/<run>/<sampling_dir>/all_generated_*.jsonl \
+    --batch_size 16
+```

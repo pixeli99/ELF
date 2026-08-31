@@ -17,7 +17,7 @@ from transformers import AutoTokenizer
 from modules.t5_encoder import get_encoder
 from modules.model import ELF_models
 from utils.logging_utils import log_for_0
-from utils.checkpoint_utils import load_checkpoint, load_model_params_from_checkpoint
+from utils.checkpoint_utils import load_checkpoint
 from utils.train_utils import TrainState, get_optimizer
 from utils.data_utils import load_jsonl_dataset, load_dataset_split, get_pad_token_id
 from generation import test_generation_uncond, test_generation_cond
@@ -92,10 +92,6 @@ def main():
     log_for_0(f"Max input length: {config.max_input_length}")
     log_for_0(f"Num samples: {config.num_samples}")
     log_for_0(f"Sampling configs: {len(config.sampling_configs)} config(s)")
-    log_for_0(f"paired_trajectory_eval={bool(getattr(config, 'paired_trajectory_eval', False))}")
-    log_for_0(f"paired_eval_base_seed={getattr(config, 'paired_eval_base_seed', 42)}")
-    if bool(getattr(config, "paired_trajectory_eval", False)):
-        log_for_0("Paired eval seed excludes sampling config index, trajectory, and alpha.")
     log_for_0(f"BF16 autocast (sampling): {bool(getattr(config, 'use_bf16', True)) and device.type == 'cuda'}")
     log_for_0(f"torch.compile (eval model): {bool(getattr(config, 'use_compile', False))}")
 
@@ -128,12 +124,7 @@ def main():
 
     # ELF model
     log_for_0(f"Creating {config.model} model...")
-    # Match train.py: tokenizer.vocab_size can exclude added special tokens that
-    # still appear in tokenized targets.
-    try:
-        vocab_size = len(tokenizer)
-    except TypeError:
-        vocab_size = tokenizer.vocab_size
+    vocab_size = tokenizer.vocab_size
     model = ELF_models[config.model](
         text_encoder_dim=encoder_config.d_model, max_length=config.max_length,
         attn_drop=config.attn_dropout, proj_drop=config.proj_dropout,
@@ -142,12 +133,6 @@ def main():
         vocab_size=vocab_size,
         num_model_mode_tokens=config.num_model_mode_tokens,
         bottleneck_dim=config.bottleneck_dim,
-        gradient_checkpointing=bool(getattr(config, "gradient_checkpointing", True)),
-        num_plan_slots=config.num_plan_slots,
-        num_plan_time_tokens=config.num_plan_time_tokens,
-        plan_whiten=config.plan_whiten,
-        plan_target_dim=config.plan_target_dim,
-        plan_response_attention=getattr(config, "plan_response_attention", "bidirectional"),
     ).to(device)
 
     # Train state template (only used to plumb EMA params + step/epoch).
@@ -163,13 +148,7 @@ def main():
         config.sampling_configs = load_sampling_configs(config.sampling_configs_path)
 
     log_for_0(f"Loading checkpoint from: {args.checkpoint_path}")
-    try:
-        state, _ = load_checkpoint(args.checkpoint_path, state)
-    except Exception as e:
-        log_for_0(f"Full checkpoint load failed ({e}); trying model-only strict=False load.")
-        load_model_params_from_checkpoint(
-            state.model, args.checkpoint_path, strict=False, prefer_ema=True,
-        )
+    state, _ = load_checkpoint(args.checkpoint_path, state)
     state.model = state.model.to(device).eval()
 
     rank = dist.get_rank() if dist.is_initialized() else 0
@@ -198,7 +177,6 @@ def main():
                 state=state, tokenizer=tokenizer, generator=seed_gen,
                 config=config, sampling_config=sc,
                 batch_size=local_batch_size, num_samples=config.num_samples,
-                eval_seed=seed_val,
             )
             if eval_dataset is None:
                 test_generation_uncond(**common_kwargs)

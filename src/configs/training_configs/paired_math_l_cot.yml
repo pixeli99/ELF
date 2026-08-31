@@ -1,6 +1,0 @@
-base_config: paired_math_base.yml
-model: ELF-L
-paired_math_target: cot_answer
-max_length: 1024
-init_from: outputs/reference_elf_l_owt/checkpoint_57051
-output_dir: outputs/paired_math/l_cot

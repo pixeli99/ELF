@@ -3,7 +3,6 @@ import itertools
 import json
 import os
 import time
-from contextlib import nullcontext
 
 import numpy as np
 import torch
@@ -44,9 +43,7 @@ def _build_eval_model(state, use_compile: bool = False) -> nn.Module:
     model = unwrap_model(state.model)
     eval_model = copy.deepcopy(model)
     if state.ema_params1:
-        # EMA tracks parameters only; buffers (e.g. the plan-target whitening stats)
-        # are carried over from the deepcopy of the live model.
-        eval_model.load_state_dict(state.ema_params1, strict=False)
+        eval_model.load_state_dict(state.ema_params1)
     eval_model.eval()
     if use_compile:
         log_for_0("Compiling eval model with torch.compile (first batch will be slower)...")
@@ -98,14 +95,11 @@ def test_generation_uncond(
     sampling_config: SamplingConfig,
     num_samples: int = 64,
     batch_size: int = 64,
-    eval_seed: int = 42,
 ):
     """Test unconditional generation."""
     sampling_method = sampling_config.sampling_method
     time_schedule = sampling_config.time_schedule
     log_for_0(f"Config: {sampling_config}")
-    if config.num_plan_slots > 0 and getattr(sampling_config, "plan_trajectory", None) == "null":
-        log_for_0("Strict null decode enabled: plan stays pure noise with t_plan=0 through decode.")
 
     log_for_0("\n" + "=" * 70)
     log_for_0("              UNCONDITIONAL GENERATION EXAMPLES")
@@ -134,13 +128,6 @@ def test_generation_uncond(
     world = _world()
     rank = _rank()
     param_dtype = next(model.parameters()).dtype
-    paired_eval = bool(getattr(config, "paired_trajectory_eval", False))
-    paired_base_seed = int(getattr(config, "paired_eval_base_seed", 42))
-    if paired_eval:
-        log_for_0(
-            "Paired trajectory eval enabled: seed depends on base seed, eval seed, "
-            "rank, sampling steps, and batch index; it excludes trajectory/config index."
-        )
 
     for num_sampling_steps, cfg_scale, self_cond_cfg_scale in itertools.product(
         steps_list, cfg_list, self_cond_cfg_scales_list
@@ -161,68 +148,38 @@ def test_generation_uncond(
             if local_processed >= local_num_samples:
                 break
             current_batch = min(batch_size, local_num_samples - local_processed)
-            paired_seed = (
-                paired_base_seed
-                + int(eval_seed) * 10_000_000
-                + rank * 1_000_003
-                + int(num_sampling_steps) * 10_007
-                + int(batch_idx) * 101
+            t_steps = get_sampling_steps(
+                n_steps=num_sampling_steps,
+                time_schedule=time_schedule,
+                P_mean=config.denoiser_p_mean, P_std=config.denoiser_p_std,
+                device=device, dtype=param_dtype,
             )
-            fork_devices = []
-            if paired_eval and device.type == "cuda":
-                fork_devices = [device.index if device.index is not None else torch.cuda.current_device()]
-            rng_context = torch.random.fork_rng(devices=fork_devices) if paired_eval else nullcontext()
-            with rng_context:
-                local_generator = generator
-                if paired_eval:
-                    torch.manual_seed(paired_seed)
-                    if device.type == "cuda":
-                        torch.cuda.manual_seed_all(paired_seed)
-                    local_generator = torch.Generator(device="cpu").manual_seed(paired_seed)
+            if device.type == "cuda":
+                z = torch.randn(
+                    (current_batch, config.max_length, d_model),
+                    dtype=param_dtype, device=device,
+                ) * config.denoiser_noise_scale
+            else:
+                z = (torch.randn((current_batch, config.max_length, d_model),
+                                 generator=generator, dtype=param_dtype)
+                     * config.denoiser_noise_scale).to(device)
 
-                t_steps = get_sampling_steps(
-                    n_steps=num_sampling_steps,
-                    time_schedule=time_schedule,
-                    P_mean=config.denoiser_p_mean, P_std=config.denoiser_p_std,
-                    device=device, dtype=param_dtype,
-                )
-                if device.type == "cuda":
-                    z = torch.randn(
-                        (current_batch, config.max_length, d_model),
-                        dtype=param_dtype, device=device,
-                    ) * config.denoiser_noise_scale
-                else:
-                    z = (torch.randn((current_batch, config.max_length, d_model),
-                                     generator=local_generator, dtype=param_dtype)
-                         * config.denoiser_noise_scale).to(device)
+            gen_start = time.time()
+            latent = _generate_samples_single_batch(
+                model=model, generator=generator, z=z, t_steps=t_steps,
+                cond_seq=None, cond_seq_mask=None,
+                config=config, sampling_config=sampling_config,
+                cfg_scale=cfg_scale, self_cond_cfg_scale=self_cond_cfg_scale,
+            )
+            generation_time += time.time() - gen_start
 
-                gen_start = time.time()
-                latent, latent_plan = _generate_samples_single_batch(
-                    model=model, generator=local_generator, z=z, t_steps=t_steps,
-                    cond_seq=None, cond_seq_mask=None,
-                    config=config, sampling_config=sampling_config,
-                    cfg_scale=cfg_scale, self_cond_cfg_scale=self_cond_cfg_scale,
-                )
-                generation_time += time.time() - gen_start
-
-                dec_start = time.time()
-                t_final_val = t_steps[-1].item()
-                plan_trajectory = getattr(sampling_config, "plan_trajectory", None)
-                is_null = config.num_plan_slots > 0 and plan_trajectory == "null"
-                # Normal trajectory comparisons decode with a finished clean-plan condition
-                # (t_plan=1). Strict null is a no-plan control: pure-noise plan and t_plan=0
-                # throughout denoising and final decode.
-                predicted_ids = _dlm_decode_batch(
-                    z=latent, model=model, t_final_val=t_final_val,
-                    config=config, self_cond_cfg_scale=self_cond_cfg_scale,
-                    x_plan=latent_plan,
-                    plan_trajectory=plan_trajectory,
-                    t_plan_decode_val=0.0 if is_null else 1.0,
-                    condition_token_mask=torch.zeros(
-                        latent.shape[:2], dtype=torch.bool, device=latent.device,
-                    ),
-                )
-                decode_time += time.time() - dec_start
+            dec_start = time.time()
+            t_final_val = t_steps[-1].item()
+            predicted_ids = _dlm_decode_batch(
+                z=latent, model=model, t_final_val=t_final_val,
+                config=config, self_cond_cfg_scale=self_cond_cfg_scale,
+            )
+            decode_time += time.time() - dec_start
 
             predicted_ids = mask_after_eos(predicted_ids, eos_token_id=eos_token_id, pad_token_id=pad_token_id)
 
@@ -255,12 +212,6 @@ def test_generation_uncond(
         name = _build_run_name(
             sampling_method, num_sampling_steps, cfg_scale, self_cond_cfg_scale,
             time_schedule, getattr(sampling_config, "sde_gamma", 0.0), suffix="uncond",
-            plan_trajectory=(getattr(sampling_config, "plan_trajectory", None)
-                             if config.num_plan_slots > 0 else None),
-            plan_lead_alpha=(getattr(sampling_config, "plan_lead_alpha", None)
-                             if config.num_plan_slots > 0 else None),
-            plan_cfg_scale=(getattr(sampling_config, "plan_cfg_scale", None)
-                            if config.num_plan_slots > 0 else None),
         )
 
         out_path = os.path.join(config.output_dir, name, f"all_generated_{epoch_val}_{step_val}.jsonl")
@@ -407,7 +358,7 @@ def test_generation_cond(
                  * config.denoiser_noise_scale).to(device)
 
             gen_start = time.time()
-            latent, latent_plan = _generate_samples_single_batch(
+            latent = _generate_samples_single_batch(
                 model=model, generator=generator, z=z, t_steps=t_steps,
                 cond_seq=cond_seq, cond_seq_mask=cond_seq_mask_arr,
                 config=config, sampling_config=sampling_config,
@@ -423,13 +374,6 @@ def test_generation_cond(
             predicted_ids = _dlm_decode_batch(
                 z=latent, model=model, t_final_val=t_final_val,
                 config=config, self_cond_cfg_scale=self_cond_cfg_scale,
-                x_plan=latent_plan,
-                plan_trajectory=getattr(sampling_config, "plan_trajectory", None),
-                t_plan_decode_val=(0.0 if (
-                    config.num_plan_slots > 0
-                    and getattr(sampling_config, "plan_trajectory", None) == "null"
-                ) else 1.0),
-                condition_token_mask=cond_seq_mask_arr,
             )
             predicted_ids = shift_left(predicted_ids, cond_len_per_sample, 0)[:, :gen_length]
             predicted_ids = mask_after_eos(predicted_ids, eos_token_id=eos_token_id, pad_token_id=pad_token_id)
@@ -455,12 +399,6 @@ def test_generation_cond(
         name = _build_run_name(
             sampling_method, num_sampling_steps, cfg_scale, self_cond_cfg_scale,
             time_schedule, getattr(sampling_config, "sde_gamma", 0.0), suffix="cond",
-            plan_trajectory=(getattr(sampling_config, "plan_trajectory", None)
-                             if config.num_plan_slots > 0 else None),
-            plan_lead_alpha=(getattr(sampling_config, "plan_lead_alpha", None)
-                             if config.num_plan_slots > 0 else None),
-            plan_cfg_scale=(getattr(sampling_config, "plan_cfg_scale", None)
-                            if config.num_plan_slots > 0 else None),
         )
 
         if _rank() == 0:

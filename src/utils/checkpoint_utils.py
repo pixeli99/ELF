@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional, Tuple
 
 import torch
 
@@ -115,32 +115,7 @@ def _download_hf_checkpoint(checkpoint_path: str) -> Optional[str]:
     return os.path.join(local_dir, sub_path) if sub_path else local_dir
 
 
-def _find_model_weight_file(ckpt_dir: str) -> Optional[str]:
-    """Find a likely model-weight file inside a checkpoint directory."""
-    names = os.listdir(ckpt_dir)
-    checkpoint_names = sorted(
-        [f for f in names if f.startswith("checkpoint_")],
-        key=_checkpoint_step,
-    )
-    for name in reversed(checkpoint_names):
-        path = os.path.join(ckpt_dir, name)
-        if os.path.isfile(path):
-            return path
-    for name in (
-        "pytorch_model.bin", "model.pt", "model.pth", "checkpoint.pt",
-        "checkpoint.pth", "weights.pt", "weights.pth",
-    ):
-        path = os.path.join(ckpt_dir, name)
-        if os.path.isfile(path):
-            return path
-    candidates = sorted(
-        os.path.join(ckpt_dir, name) for name in names
-        if name.endswith((".pt", ".pth", ".bin"))
-    )
-    return candidates[0] if candidates else None
-
-
-def _restore_checkpoint(checkpoint_path: str, *, allow_model_files: bool = False) -> Any:
+def _restore_checkpoint(checkpoint_path: str) -> Any:
     """Restore a checkpoint from a file or directory (latest inside dir)."""
     local = _local_path(checkpoint_path)
     resolved = local
@@ -148,10 +123,6 @@ def _restore_checkpoint(checkpoint_path: str, *, allow_model_files: bool = False
         latest = find_latest_checkpoint(local)
         if latest is not None and os.path.isfile(latest):
             resolved = latest
-        elif allow_model_files:
-            model_file = _find_model_weight_file(local)
-            if model_file is not None:
-                resolved = model_file
     if os.path.isfile(resolved):
         return torch.load(resolved, map_location="cpu")
     return None
@@ -164,128 +135,6 @@ def _validate_checkpoint(ckpt: Any):
     missing_keys = [key for key in required_keys if key not in ckpt]
     if missing_keys:
         raise ValueError(f"checkpoint restore missing keys: {missing_keys}")
-
-
-def _restore_model_checkpoint(checkpoint_path: str) -> Tuple[Any, str]:
-    """Restore a model-only checkpoint from local path or HF id."""
-    errors = []
-    local_path = _local_path(checkpoint_path)
-    if os.path.exists(local_path):
-        try:
-            ckpt = _restore_checkpoint(local_path, allow_model_files=True)
-            if ckpt is None:
-                raise ValueError("checkpoint restore returned None")
-            return ckpt, "local"
-        except Exception as e:
-            errors.append(f"local: {e}")
-
-    try:
-        hf_path = _download_hf_checkpoint(checkpoint_path)
-        if hf_path:
-            ckpt = _restore_checkpoint(hf_path, allow_model_files=True)
-            if ckpt is None:
-                raise ValueError("checkpoint restore returned None")
-            return ckpt, "HF"
-    except Exception as e:
-        errors.append(f"HF: {e}")
-
-    raise ValueError(
-        f"Failed to load model checkpoint from {checkpoint_path}. Tried: {'; '.join(errors)}"
-    )
-
-
-def _select_model_params(ckpt: Any, *, prefer_ema: bool = True) -> Tuple[Dict[str, torch.Tensor], str]:
-    """Pick the model state dict from common ELF / PyTorch checkpoint layouts."""
-    if not isinstance(ckpt, dict):
-        raise ValueError(f"Unsupported checkpoint type: {type(ckpt).__name__}")
-    if prefer_ema and isinstance(ckpt.get("ema_params1"), dict) and ckpt["ema_params1"]:
-        return ckpt["ema_params1"], "ema_params1"
-    for key in ("params", "state_dict", "model_state_dict", "model"):
-        value = ckpt.get(key)
-        if isinstance(value, dict) and value:
-            return value, key
-    if ckpt and all(torch.is_tensor(v) for v in ckpt.values()):
-        return ckpt, "raw_state_dict"
-    raise ValueError(f"Checkpoint does not contain model parameters; keys={list(ckpt.keys())}")
-
-
-def _summarize_keys(label: str, keys, limit: int = 20) -> None:
-    keys = list(keys)
-    if not keys:
-        log_for_0(f"{label}: 0")
-        return
-    preview = ", ".join(keys[:limit])
-    suffix = "" if len(keys) <= limit else f", ... (+{len(keys) - limit} more)"
-    log_for_0(f"{label}: {len(keys)} [{preview}{suffix}]")
-
-
-def load_model_params_from_checkpoint(
-    model,
-    checkpoint_path_or_hf_id: str,
-    *,
-    strict: bool = False,
-    prefer_ema: bool = True,
-) -> Dict[str, int]:
-    """Load only model parameters from a local/HF checkpoint.
-
-    This is for warm-start (`init_from`): optimizer, scheduler, step, epoch, and
-    RNG state are intentionally ignored. With strict=False, only keys present in
-    the target model with identical shapes are loaded; new Ordered-ELF plan keys
-    stay randomly initialized.
-    """
-    log_for_0(
-        f"Warm-starting model from {checkpoint_path_or_hf_id} "
-        f"(strict={strict}, prefer_ema={prefer_ema})..."
-    )
-    ckpt, loaded_from = _restore_model_checkpoint(checkpoint_path_or_hf_id)
-    params, source_name = _select_model_params(ckpt, prefer_ema=prefer_ema)
-    inner_model = unwrap_model(model)
-    model_state = inner_model.state_dict()
-
-    if strict:
-        result = inner_model.load_state_dict(params, strict=True)
-        log_for_0(f"Loaded strict model params from {loaded_from}:{source_name}")
-        return {
-            "loaded": len(params),
-            "missing": len(result.missing_keys),
-            "unexpected": len(result.unexpected_keys),
-            "shape_skipped": 0,
-        }
-
-    loadable = {}
-    unexpected = []
-    shape_skipped = []
-    for key, value in params.items():
-        if not torch.is_tensor(value):
-            unexpected.append(key)
-            continue
-        if key not in model_state:
-            unexpected.append(key)
-            continue
-        if tuple(value.shape) != tuple(model_state[key].shape):
-            shape_skipped.append(
-                f"{key}: checkpoint{tuple(value.shape)} != model{tuple(model_state[key].shape)}"
-            )
-            continue
-        loadable[key] = value
-
-    if not loadable:
-        raise ValueError(f"No compatible model parameters found in {checkpoint_path_or_hf_id}")
-
-    result = inner_model.load_state_dict(loadable, strict=False)
-    missing = result.missing_keys
-    unexpected = unexpected + list(result.unexpected_keys)
-
-    log_for_0(f"Loaded model params from {loaded_from}:{source_name}: {len(loadable)} tensors")
-    _summarize_keys("Warm-start missing keys", missing)
-    _summarize_keys("Warm-start unexpected keys", unexpected)
-    _summarize_keys("Warm-start shape-skipped keys", shape_skipped)
-    return {
-        "loaded": len(loadable),
-        "missing": len(missing),
-        "unexpected": len(unexpected),
-        "shape_skipped": len(shape_skipped),
-    }
 
 
 def load_checkpoint(checkpoint_path: str, state) -> Tuple[Any, int]:

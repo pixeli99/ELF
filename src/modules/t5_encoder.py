@@ -43,22 +43,14 @@ class T5EncoderConfig:
 class T5Encoder(nn.Module):
     """T5 encoder used as a frozen text embedder."""
 
-    def __init__(self, config: T5EncoderConfig, *, pretrained: bool = True,
-                 revision: Optional[str] = None, local_files_only: bool = False,
-                 cache_dir: Optional[str] = None):
+    def __init__(self, config: T5EncoderConfig, *, pretrained: bool = True):
         super().__init__()
         from transformers import T5EncoderModel, T5Config
 
         if pretrained:
-            self.model = T5EncoderModel.from_pretrained(
-                config.model_name, revision=revision, local_files_only=local_files_only,
-                cache_dir=cache_dir,
-            )
+            self.model = T5EncoderModel.from_pretrained(config.model_name)
         else:
-            hf_config = T5Config.from_pretrained(
-                config.model_name, revision=revision, local_files_only=local_files_only,
-                cache_dir=cache_dir,
-            )
+            hf_config = T5Config.from_pretrained(config.model_name)
             self.model = T5EncoderModel(hf_config)
 
         hf = self.model.config
@@ -88,13 +80,11 @@ class T5Encoder(nn.Module):
         return out.last_hidden_state
 
 
-def get_encoder(model_name: str, dtype: Any, revision: Optional[str] = None,
-                local_files_only: bool = False, cache_dir: Optional[str] = None):
+def get_encoder(model_name: str, dtype: Any):
     """Return `(config, model)`. Weights are downloaded on first use."""
     log_for_0(f"Loading T5 Encoder: {model_name}...")
     config = T5EncoderConfig.from_pretrained(model_name, dtype=dtype)
-    model = T5Encoder(config, pretrained=True, revision=revision,
-                      local_files_only=local_files_only, cache_dir=cache_dir)
+    model = T5Encoder(config, pretrained=True)
     if dtype is not None:
         model = model.to(dtype)
     return config, model
