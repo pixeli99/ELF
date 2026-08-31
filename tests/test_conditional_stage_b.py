@@ -14,7 +14,6 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 
 from configs.config import Config, load_config_from_yaml
 from modules.model import ELF
-from modules.thinking_resampler import build_adjacent_mlp_encoder
 from train_step import (
     _gate_plan_mediation_by_clock, _sample_plan_mediation_mask, train_step,
 )
@@ -155,7 +154,7 @@ def _tiny_config(mode, max_length=64):
     config.latent_mean, config.latent_std = 0.0, 0.2
     config.max_length = max_length
     config.condition_max_tokens = 32
-    config.plan_source = "thinking_mlp_4to1"
+    config.plan_source = "frozen_pool"
     config.plan_resampler = "frozen_pool"
     config.plan_whiten = "none"
     config.plan_time_schedule = "uniform"
@@ -207,7 +206,7 @@ class PlanTokenCapacityTests(unittest.TestCase):
         self.assertEqual(plan_token_capacity_for(SimpleNamespace(
             plan_source="span_vae", max_plan_slots=64, num_plan_slots=64)), 1024)
         self.assertEqual(plan_token_capacity_for(SimpleNamespace(
-            plan_source="thinking_mlp_4to1", max_plan_slots=255, num_plan_slots=255)), 1020)
+            plan_source="frozen_pool", max_plan_slots=255, num_plan_slots=255)), 1020)
         with self.assertRaises(ValueError):
             plan_token_capacity_for(SimpleNamespace(plan_source="span_vae", max_plan_slots=16,
                                                     num_plan_slots=16))
@@ -222,7 +221,7 @@ class EosPaddingTests(unittest.TestCase):
         from utils.conditional_data import get_conditional_dataloader
         tok = WordTokenizer()
         cfg = SimpleNamespace(max_length=64, condition_max_tokens=32, max_plan_slots=16,
-                              num_plan_slots=16, plan_source="thinking_mlp_4to1", pad_token="eos")
+                              num_plan_slots=16, plan_source="frozen_pool", pad_token="eos")
         loader, collator = get_conditional_dataloader(_rows(n=2), tok, cfg, batch_size=2)
         self.assertEqual(collator.pad_token_id, tok.eos_token_id)
         batch = next(iter(loader))
@@ -286,7 +285,7 @@ class ConditionalStepTests(unittest.TestCase):
         encoder = StubT5()
         _, metrics = train_step(
             state, encoder, batch, config,
-            plan_encoder=build_adjacent_mlp_encoder(WIDTH, 4, 16).requires_grad_(False),
+            plan_encoder=None,
             update_model=False)
         seen["x0"] = encoder(batch["input_ids"]).float() / 0.2
         return batch, metrics, seen
@@ -331,8 +330,10 @@ class ConditionalStepTests(unittest.TestCase):
 
     def test_plan_and_condition_coexist(self):
         batch, metrics, seen = self._run("ordered")
+        # span-VAE contract: every row occupies the full slot capacity, and how much of
+        # it carries content is generated rather than masked in.
         self.assertEqual(int(metrics["plan_valid_slots"]),
-                         int((batch["plan_attention_mask"].sum(1) + 3) // 4))
+                         batch["input_ids"].shape[0] * _tiny_config("ordered").num_plan_slots)
         self.assertTrue(torch.equal(
             seen["condition_token_mask"].cpu(), batch["cond_seq_mask"].bool(),
         ))

@@ -1,0 +1,6 @@
+base_config: paired_math_base.yml
+model: ELF-L
+paired_math_target: answer
+max_length: 512
+init_from: outputs/reference_elf_l_owt/checkpoint_57051
+output_dir: outputs/paired_math/l_noreason

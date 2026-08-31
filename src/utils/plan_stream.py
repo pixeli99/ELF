@@ -26,11 +26,10 @@ from typing import Optional
 import torch
 
 from utils.encoder_utils import encode_thinking_x0
-from utils.plan_utils import apply_plan_whitening, build_thinking_plan_target
 from utils.sampling_utils import add_noise, sample_timesteps
 
 GROUP_MODES = ("ordered", "diagonal", "register", "vanilla")
-PLAN_SOURCES = ("span_vae", "thinking_mlp_4to1", "frozen_pool")
+PLAN_SOURCES = ("span_vae", "frozen_pool")
 THINKING_GROUP_SIZE = 4
 
 
@@ -113,26 +112,6 @@ def max_plan_slots(config) -> int:
 
 
 @torch.no_grad()
-def compress_thinking_to_slots(input_ids, token_mask, encoder, plan_encoder, config):
-    """thinking token ids -> unwhitened plan slots. The single canonical path.
-
-    Callers that need whitened slots want `build_whitened_thinking_plan`; the
-    whitener stats pass is the only legitimate caller of this raw form, since it
-    is what fits the statistics in the first place.
-    """
-    if plan_encoder is None:
-        raise ValueError("thinking_mlp_4to1 requires a frozen plan_encoder")
-    latents = encode_thinking_x0(
-        input_ids=input_ids, attention_mask=token_mask, encoder=encoder,
-        latent_mean=config.latent_mean, latent_std=config.latent_std,
-        use_bf16=bool(getattr(config, "use_bf16", True)) and input_ids.is_cuda,
-    )
-    return build_thinking_plan_target(
-        latents, token_mask, plan_encoder, max_plan_slots=max_plan_slots(config),
-    )
-
-
-@torch.no_grad()
 def build_vae_plan_target(input_ids, token_mask, encoder, plan_vae, config):
     """thinking token ids -> Plan-VAE posterior mean, trailing NULL slots as zeros.
 
@@ -151,15 +130,6 @@ def build_vae_plan_target(input_ids, token_mask, encoder, plan_vae, config):
     mu, _, active = plan_vae.posterior(latents, token_mask.bool())
     ones = torch.ones(mu.shape[:2], dtype=torch.bool, device=mu.device)
     return mu, ones, active
-
-
-@torch.no_grad()
-def build_whitened_thinking_plan(input_ids, token_mask, encoder, plan_encoder, model, config):
-    """thinking token ids -> the whitened plan target the model is trained against."""
-    raw, plan_mask = compress_thinking_to_slots(
-        input_ids, token_mask, encoder, plan_encoder, config,
-    )
-    return apply_plan_whitening(model, raw, plan_mask), plan_mask
 
 
 @dataclass
@@ -224,13 +194,8 @@ def _register_stream(config, batch, model, t, plan_source, schedule_seed):
     row, decoder rows included, and there is no plan loss.
     """
     batch_size, dtype, device = t.shape[0], t.dtype, t.device
-    if plan_source == "thinking_mlp_4to1":
-        lengths = plan_slot_lengths(batch["plan_attention_mask"].to(device))
-        runtime_k = int(lengths.max())
-        plan_mask = torch.arange(runtime_k, device=device)[None, :] < lengths[:, None]
-    else:
-        runtime_k = int(config.num_plan_slots)
-        plan_mask = torch.ones((batch_size, runtime_k), dtype=torch.bool, device=device)
+    runtime_k = int(config.num_plan_slots)
+    plan_mask = torch.ones((batch_size, runtime_k), dtype=torch.bool, device=device)
 
     schedule_seed("plan_noise_seed")
     noise = torch.randn((batch_size, runtime_k, model.plan_latent_dim),
@@ -262,17 +227,6 @@ def build_plan_stream(
             encoder, plan_encoder, config,
         )
         x0_plan = x0_plan.to(dtype)
-        if bool(batch.get("diagnostic_zero_plan_content", False)):
-            x0_plan = torch.zeros_like(x0_plan)
-    elif plan_source == "thinking_mlp_4to1":
-        x0_plan, plan_mask = build_whitened_thinking_plan(
-            batch["plan_input_ids"].to(device, non_blocking=True).long(),
-            batch["plan_attention_mask"].to(device, non_blocking=True).bool(),
-            encoder, plan_encoder, model, config,
-        )
-        x0_plan = x0_plan.to(dtype)
-        # Read-only fixed-noise diagnostics may strip plan content while keeping the
-        # runtime K and mask. Without this explicit key training is unchanged.
         if bool(batch.get("diagnostic_zero_plan_content", False)):
             x0_plan = torch.zeros_like(x0_plan)
     else:

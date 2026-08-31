@@ -329,8 +329,11 @@ class ELF(nn.Module):
         The whitening stats are dataset constants (buffers); the plan is never un-whitened —
         it only ever conditions the model, so its latent space is free to be standardized.
         """
-        from utils.plan_utils import build_plan_target
-        return build_plan_target(self, x0, valid_mask)
+        from utils.sampling_utils import frozen_pool_plan_target
+        pooled = frozen_pool_plan_target(x0, valid_mask, self.num_plan_slots)
+        if self.plan_whiten == "zscore":
+            pooled = (pooled - self.plan_mean) / self.plan_std
+        return pooled
 
     def build_context(self, t: torch.Tensor,
                       t_plan: Optional[torch.Tensor] = None,

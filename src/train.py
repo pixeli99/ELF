@@ -28,9 +28,6 @@ from transformers import AutoTokenizer
 
 from modules.t5_encoder import get_encoder
 from modules.plan_vae import SPAN as PLAN_VAE_SPAN, load_frozen_plan_vae
-from modules.thinking_resampler import (
-    build_adjacent_mlp_encoder, freeze_module, ThinkingMLPConfig, ThinkingMLPEncoder,
-)
 from utils.logging_utils import log_for_0
 from utils.checkpoint_utils import (
     save_checkpoint, load_checkpoint, find_latest_checkpoint,
@@ -49,12 +46,11 @@ from utils.data_utils import (
     FormalStageBPairedDataset, FormalStageBCollator, FormalStageBScheduleDataset,
 )
 from utils.encoder_utils import encode_text, encode_thinking_x0
-from utils.dolma_data import DolmaStreamDataset, get_dolma_dataloader
+from utils.paired_math_data import PairedMathDataset, get_paired_math_dataloader
 from utils.conditional_data import (ConditionalPairedDataset, ConditionalSchedule,
                                     get_conditional_dataloader)
 from utils.plan_stream import assert_group_protocol, compress_thinking_to_slots, resolve_group
 from utils.sampling_utils import frozen_pool_plan_target
-from utils.plan_utils import build_thinking_plan_target
 from train_step import train_step
 
 try:
@@ -131,7 +127,7 @@ def _is_eval_epoch(config, current_epoch: int) -> bool:
 
 def uses_paired_thinking(config) -> bool:
     """Stage-B sources whose data is paired thinking/response documents."""
-    return getattr(config, "plan_source", "frozen_pool") in ("thinking_mlp_4to1", "span_vae")
+    return getattr(config, "plan_source", "frozen_pool") == "span_vae"
 
 
 def should_run_validation(config, current_epoch: int) -> bool:
@@ -413,7 +409,10 @@ def run_training(config, *, force_cpu: bool = False):
     pad_token_id = get_pad_token_id(tokenizer, config.pad_token)
     log_for_0(f"Using {'EOS' if config.pad_token == 'eos' else 'PAD'} token for padding: {pad_token_id}")
 
-    if uses_paired_thinking(config):
+    if getattr(config, "paired_math_dir", None):
+        train_dataset = PairedMathDataset(config.paired_math_dir, split="train")
+        eval_dataset = None
+    elif uses_paired_thinking(config):
         if group_mode != "vanilla":
             if config.max_plan_slots is None:
                 raise ValueError("paired thinking Stage-B requires max_plan_slots")
@@ -446,25 +445,6 @@ def run_training(config, *, force_cpu: bool = False):
                     config.formal_stage_b_schedule,config.formal_stage_b_schedule_sha256)
             eval_dataset = None
             log_for_0(f"Formal paired Stage-B documents: train={len(train_dataset)} val=0 test=0")
-        else:
-            if not config.thinking_data_path:
-                raise ValueError("thinking_mlp_4to1 requires thinking_data_path")
-            document_splits = load_thinking_jsonl_splits(
-                config.thinking_data_path, config.seed, config.thinking_split,
-            )
-            train_dataset, eval_dataset = document_splits["train"], document_splits["val"]
-            log_for_0(
-                f"Thinking documents: train={len(train_dataset)} val={len(eval_dataset)} "
-                f"test={len(document_splits['test'])}"
-            )
-    elif config.dolma_data_dir:
-        train_dataset = DolmaStreamDataset(
-            config.dolma_data_dir, tokenizer, max_length=config.max_length,
-            min_tokens=config.dolma_min_tokens,
-            samples_per_epoch=config.dolma_samples_per_epoch,
-            seed=config.seed, rank=rank, world=world,
-        )
-        eval_dataset = None
     else:
         train_dataset, eval_dataset = load_dataset(config)
 
@@ -490,46 +470,6 @@ def run_training(config, *, force_cpu: bool = False):
             raise ValueError("plan VAE artifact does not match num_plan_slots/plan_target_dim")
         log_for_0(f"Loaded frozen Plan-VAE (beta={vae_meta['beta']}, "
                   f"K={vae_meta['k_max']}, z={vae_meta['z_dim']}) from {config.plan_vae_artifact}")
-    elif (getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1"
-            and group_mode in ("ordered", "diagonal")):
-        if encoder_config.d_model != 512:
-            raise ValueError("thinking_mlp_4to1 Stage-B requires t5-small width 512")
-        artifact_path = config.frozen_thinking_encoder or config.thinking_resampler_checkpoint
-        if not artifact_path:
-            raise ValueError("thinking_mlp_4to1 requires a frozen encoder artifact")
-        if config.frozen_encoder_sha256 and _sha256_file(artifact_path) != config.frozen_encoder_sha256:
-            raise ValueError("frozen thinking encoder SHA256 mismatch")
-        probe = torch.load(artifact_path, map_location="cpu", weights_only=True)
-        is_formal_encoder = "architecture" in probe
-        if is_formal_encoder:
-            architecture = probe["architecture"]
-            if architecture != {
-                "input_dim": 2048, "hidden_dim": 6144, "output_dim": 512,
-                "group_size": 4, "activation": "gelu", "dropout": 0.0,
-            }:
-                raise ValueError(f"unexpected formal encoder architecture: {architecture}")
-            encoder_state = probe["encoder"]
-            hidden_dim = 6144
-            if (config.frozen_stage_a_checkpoint_sha256
-                    and probe.get("source_checkpoint_sha256")
-                    != config.frozen_stage_a_checkpoint_sha256):
-                raise ValueError("frozen encoder source checkpoint SHA256 mismatch")
-        else:
-            encoder_state = probe.get("encoder")
-            hidden_dim = 1024
-        if encoder_state is None:
-            raise ValueError("Stage-A artifact is missing encoder state")
-        if is_formal_encoder:
-            plan_encoder = ThinkingMLPEncoder(ThinkingMLPConfig(hidden_dim=hidden_dim))
-        else:
-            plan_encoder = build_adjacent_mlp_encoder(512, 4, hidden_dim)
-        plan_encoder.load_state_dict(encoder_state, strict=True)
-        plan_encoder = freeze_module(plan_encoder.to(device))
-        log_for_0(
-            f"Loaded frozen Stage-A plan encoder only from "
-            f"{artifact_path}"
-        )
-
     log_for_0(f"Creating {config.model} model...")
     # Use the full tokenizer length for CE heads; tokenizer.vocab_size can exclude
     # added special tokens that still appear in tokenized Qwen targets.
@@ -563,33 +503,6 @@ def run_training(config, *, force_cpu: bool = False):
         load_model_params_from_checkpoint(
             model, config.init_from, strict=False, prefer_ema=True,
         )
-        if getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1" and group_mode != "vanilla":
-            stage_b = config.formal_stage_b_manifest or config.conditional_train_manifest
-            if stage_b and config.num_plan_slots > 0 and config.num_plan_slots != 16:
-                source = torch.load(config.init_from, map_location="cpu", weights_only=False)
-                source_state = source.get("ema_params1") or source.get("params")
-                old_slots = source_state.get("plan_slot_embed")
-                if old_slots is None or old_slots.ndim != 3 or old_slots.shape[1] != 16:
-                    raise ValueError("ordered warm-start lacks the expected K=16 plan_slot_embed")
-                resized = F.interpolate(
-                    old_slots.float().transpose(1, 2), size=config.num_plan_slots,
-                    mode="linear", align_corners=True,
-                ).transpose(1, 2)
-                with torch.no_grad():
-                    model.plan_slot_embed.copy_(resized.to(model.plan_slot_embed))
-                log_for_0(
-                    f"Deterministically interpolated ordered K=16 plan_slot_embed to "
-                    f"capacity K={config.num_plan_slots}; no random slot expansion."
-                )
-            model.plan_target_mean.zero_()
-            if hasattr(model, "plan_target_std"):
-                model.plan_target_std.fill_(1.0)
-            model.plan_whiten_ready.zero_()
-            log_for_0(
-                "Reinitialized plan whitening buffers for thinking_mlp_4to1; "
-                "old frozen-pool statistics are intentionally not reused."
-            )
-
     if config.thinking_whitener_artifact and group_mode in ("ordered", "diagonal"):
         if not (config.formal_stage_b_manifest or config.conditional_train_manifest):
             raise ValueError("precomputed thinking whitener requires a Stage-B manifest")
@@ -710,15 +623,7 @@ def run_training(config, *, force_cpu: bool = False):
     if (config.num_plan_slots > 0 and not config.plan_register_only
             and config.plan_whiten not in ("none", "external")
             and int(state.model.plan_whiten_ready.item()) == 0):
-        if getattr(config, "plan_source", "frozen_pool") == "thinking_mlp_4to1":
-            if config.plan_whiten == "pca":
-                raise ValueError("Stage-B single-layer probe currently supports none/zscore whitening")
-            _fit_thinking_plan_whitener(
-                state.model, encoder, plan_encoder, train_dataset, tokenizer,
-                config, device, world,
-            )
-        else:
-            _fit_plan_whitener(state.model, encoder, train_dataset, config, device, pad_token_id, world)
+        _fit_plan_whitener(state.model, encoder, train_dataset, config, device, pad_token_id, world)
 
     # torch.compile before DDP so only the inner module is compiled and
     # checkpoint I/O (which uses unwrap_model -> _orig_mod) still works.
@@ -752,7 +657,13 @@ def run_training(config, *, force_cpu: bool = False):
             yaml.dump(config_dict, f, default_flow_style=False, sort_keys=False)
         log_for_0(f"Config saved to {config_path}")
 
-    if uses_paired_thinking(config):
+    if getattr(config, "paired_math_dir", None):
+        validation_dataloader = None
+        train_dataloader, _ = get_paired_math_dataloader(
+            train_dataset, tokenizer, config, batch_size=local_batch_size,
+            num_workers=config.num_workers, distributed=(world > 1),
+        )
+    elif uses_paired_thinking(config):
         if config.formal_stage_b_manifest or config.conditional_train_manifest:
             if config.conditional_train_manifest:
                 train_dataloader, _ = get_conditional_dataloader(
@@ -794,12 +705,6 @@ def run_training(config, *, force_cpu: bool = False):
                 distributed=False,
                 plan_add_special_tokens=config.thinking_plan_add_special_tokens,
             )
-    elif config.dolma_data_dir:
-        validation_dataloader = None
-        train_dataloader = get_dolma_dataloader(
-            train_dataset, pad_token_id, batch_size=local_batch_size,
-            max_length=config.max_length, num_workers=config.num_workers,
-        )
     else:
         validation_dataloader = None
         train_dataloader = get_dataloader(

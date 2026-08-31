@@ -1,9 +1,0 @@
-base_config: train_tpt_ELF-B_formal_mlp_variable_k_10k.yml
-group_mode: register
-formal_stage_b_schedule: results/tpt_million_v1/common_schedule_80k_seed42_v1/common_schedule_80k_seed42_v1.jsonl
-formal_stage_b_schedule_sha256: eb840ba3dc78e90aa91f91c1543f47e30f4fe10260ac16c249320a56694dd766
-output_dir: outputs/elf_b_common80k_register_10k_v1
-plan_register_only: true
-plan_done_frac: 0.0
-plan_diag_frac: 0.0
-plan_loss_weight: 0.0

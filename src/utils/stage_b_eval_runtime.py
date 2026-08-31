@@ -5,13 +5,10 @@ import torch
 from transformers import AutoConfig, AutoTokenizer
 from modules.model import ELF_models
 from modules.t5_encoder import get_encoder
-from modules.thinking_resampler import ThinkingMLPConfig, ThinkingMLPEncoder, freeze_module
 from utils.checkpoint_utils import find_latest_checkpoint
-from utils.plan_stream import build_whitened_thinking_plan
-from modules.model import build_plan_response_attention_mask
-from utils.stage_b_oracle_content_probe import oracle_model_input, read_pointer
 
 logger = logging.getLogger(__name__)
+
 
 def _resolve_checkpoint(path):
     path = str(path)
@@ -51,51 +48,3 @@ def load_model_and_encoder(config, checkpoint_path, device, load_encoder=True):
         raise ValueError("formal evaluation requires EMA parameters; raw fallback is forbidden")
     model.load_state_dict(checkpoint["ema_params1"], strict=False)
     return model.to(device).eval(), encoder, tokenizer, resolved
-
-def load_thinking_plan_stack(config, device):
-    """Load frozen T5 and the exported nonlinear adjacent-4 MLP encoder once."""
-    _, t5 = get_encoder(config.encoder_model_name, torch.float32)
-    t5 = t5.to(device).eval().requires_grad_(False)
-    artifact = torch.load(config.frozen_thinking_encoder, map_location="cpu", weights_only=True)
-    encoder = ThinkingMLPEncoder(ThinkingMLPConfig(hidden_dim=6144))
-    encoder.load_state_dict(artifact["encoder"], strict=True)
-    return t5, freeze_module(encoder.to(device))
-
-@torch.inference_mode()
-def build_clean_thinking_plan(meta, which, tokenizer, t5, encoder, model, config, device):
-    """Canonical thinking -> T5 -> adjacent-4 MLP -> whitener construction."""
-    prefix = which + "_"
-    row = read_pointer(meta[prefix + "source_shard"], meta[prefix + "byte_offset"],
-                       meta[prefix + "sample_id"])
-    item = oracle_model_input(row)
-    encoded = tokenizer(item["thinking"], add_special_tokens=True, truncation=False,
-                        return_tensors="pt")
-    ids = encoded["input_ids"].to(device)
-    mask = ids.ne(tokenizer.pad_token_id)
-    if ids.shape[1] > 1024:
-        raise ValueError(f'oracle thinking exceeds 1024: {item["sample_id"]}')
-    plan, plan_mask = build_whitened_thinking_plan(ids, mask, t5, encoder, model, config)
-    plan = plan.float()
-    expected = int(meta["recipient_K"] if which == "recipient" else meta["donor_K"])
-    if int(plan_mask.sum()) != expected:
-        raise ValueError("oracle plan K mismatch")
-    return plan, plan_mask
-
-def attention_truth(model, response_mask, plan_mask):
-    prefix_len = model.num_time_tokens + model.num_plan_time_tokens + model.num_self_cond_cfg_tokens
-    mode_len = model.num_model_mode_tokens
-    mask = build_plan_response_attention_mask(
-        response_mask.bool(), plan_mask.bool(), prefix_len, mode_len,
-        model.num_time_tokens, model.num_plan_time_tokens, model.plan_response_attention)
-    total = prefix_len + mode_len + plan_mask.shape[1] + response_mask.shape[1]
-    allowed = mask[:, None, :].expand(-1, total, -1) if mask.ndim == 2 else mask
-    plan_start, plan_end = prefix_len + mode_len, prefix_len + mode_len + plan_mask.shape[1]
-    expected = response_mask[:, :, None] & plan_mask[:, None, :]
-    invalid_keys = ~torch.cat((torch.ones_like(response_mask[:, :prefix_len + mode_len]),
-                               plan_mask, response_mask), dim=1).bool()
-    return {
-        "response_reads_valid_plan": bool(allowed[:, plan_end:, plan_start:plan_end].masked_select(expected).all()),
-        "padding_keys_invisible": not bool(allowed.masked_select(invalid_keys[:, None, :].expand_as(allowed)).any()),
-        "layout": ["prefix", "mode", "plan", "response"],
-        "prefix_len": prefix_len, "mode_len": mode_len,
-    }

@@ -74,7 +74,7 @@ class Config:
     num_plan_slots: int = 0            # K planning slots (second stream); 0 disables the plan stream
     num_plan_time_tokens: int = 4      # In-context time tokens carrying the plan clock t_plan
     plan_resampler: str = "frozen_pool"  # How the plan target x0_plan is built: "frozen_pool" | "learnable"
-    plan_source: str = "frozen_pool"  # "frozen_pool" | "thinking_mlp_4to1"
+    plan_source: str = "frozen_pool"  # "frozen_pool" | "span_vae"
     plan_response_attention: str = "bidirectional"  # bidirectional | causal_bottleneck | prompt_causal_bottleneck
     # Training-only intervention. On selected rows, non-plan queries cannot read
     # prompt keys directly, so prompt information must reach the response through
@@ -85,7 +85,6 @@ class Config:
     plan_mediation_min_t: float = 0.0
     max_plan_slots: int = None  # Runtime cap for variable thinking slots; defaults to num_plan_slots
     thinking_data_path: str = None
-    thinking_resampler_checkpoint: str = None
     thinking_split: str = "80_10_10"
     thinking_plan_add_special_tokens: bool = True
     formal_stage_b_manifest: str = None
@@ -102,15 +101,17 @@ class Config:
     conditional_master_seed: int = 42  # with the row count, this IS the schedule
     conditional_verify_shards: bool = True
     condition_max_tokens: int = 1024
+    # Paired math package (tools/build_paired_math.py): prompt / reasoning / short answer.
+    # paired_math_target picks what the window has to hold: "answer" for the no-reasoning
+    # and plan arms, "cot_answer" for the explicit-reasoning arm.
+    paired_math_dir: str = None
+    paired_math_target: str = "answer"
     # Ceiling experiment: put the gold thinking into the clean condition prefix
     # (prompt[:condition_max_tokens] + thinking[:condition_thinking_max_tokens]).
     # Not a deployable protocol; measures how much the reasoning text could help.
     condition_includes_thinking: bool = False
     condition_thinking_max_tokens: int = 1024
     # --- Dolma backbone pretraining (streaming jsonl.zst) ---
-    dolma_data_dir: str = None
-    dolma_min_tokens: int = 64
-    dolma_samples_per_epoch: int = 256000
     # --- frozen Plan-VAE (plan_source: span_vae) ---
     plan_vae_artifact: str = None
     plan_vae_artifact_sha256: str = None
