@@ -69,6 +69,7 @@ def train_step(
         latent_mean=latent_mean,
         latent_std=latent_std,
         use_bf16=use_bf16,
+        cond_mask=cond_seq_mask,
     ).to(dtype)
 
     batch_size, seq_length = x0.shape[0], x0.shape[1]

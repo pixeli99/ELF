@@ -351,6 +351,7 @@ def test_generation_cond(
             cond_seq = encode_text(
                 input_ids=input_ids, attention_mask=encoder_attention_mask,
                 encoder=encoder, latent_mean=encode_latent_mean, latent_std=encode_latent_std,
+                cond_mask=cond_seq_mask_arr,
             ).to(next(model.parameters()).dtype)
 
             z = (torch.randn((bsz, config.max_length, d_model),

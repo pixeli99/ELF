@@ -23,3 +23,6 @@ hf_cache/
 *.safetensors
 *.backup
 *.bak
+
+# vendored t5-small weights, staged for the cluster
+assets/

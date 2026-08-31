@@ -137,12 +137,8 @@ def _validate_checkpoint(ckpt: Any):
         raise ValueError(f"checkpoint restore missing keys: {missing_keys}")
 
 
-def load_checkpoint(checkpoint_path: str, state) -> Tuple[Any, int]:
-    """Load an ELF checkpoint.
-
-    Uses an existing local path first; otherwise tries HF and then local fallback.
-    """
-    log_for_0(f"Loading ELF checkpoint from {checkpoint_path}...")
+def _fetch_checkpoint(checkpoint_path: str) -> Tuple[Any, str]:
+    """Resolve a checkpoint payload: an existing local path first, otherwise HF."""
     ckpt, loaded_from = None, None
     errors = []
 
@@ -172,19 +168,56 @@ def load_checkpoint(checkpoint_path: str, state) -> Tuple[Any, int]:
         raise ValueError(
             f"Failed to load checkpoint from {checkpoint_path}. Tried: {'; '.join(errors)}"
         )
+    return ckpt, loaded_from
+
+
+def _ema_on_model_devices(ema_src, inner_model):
+    device_map = {n: p.device for n, p in inner_model.named_parameters()}
+    for n, b in inner_model.named_buffers():
+        device_map.setdefault(n, b.device)
+    fallback_device = next(iter(device_map.values()), torch.device("cpu"))
+    return {n: t.to(device_map.get(n, fallback_device)) for n, t in ema_src.items()}
+
+
+def load_init_weights(checkpoint_path: str, state):
+    """Warm start: take the weights from a checkpoint and nothing else.
+
+    `load_checkpoint` restores the optimizer, the schedule and the step counter too,
+    which is what resuming an interrupted run needs. Starting a new run from pretrained
+    weights needs the opposite: the weights, then a fresh optimizer on a fresh schedule
+    from step 0. Loading a 95085-step pretraining checkpoint with `resume` would instead
+    place the finetune at the far end of its own decay with the pretraining moments still
+    in the optimizer.
+
+    The EMA shadow is warm started from the checkpoint as well, so that evaluating the EMA
+    weights early in the run reads as pretrained rather than as a decayed copy of noise.
+    """
+    ckpt, loaded_from = _fetch_checkpoint(checkpoint_path)
+    inner_model = unwrap_model(state.model)
+    inner_model.load_state_dict(ckpt["params"])
+    state.ema_params1 = _ema_on_model_devices(ckpt.get("ema_params1", ckpt["params"]), inner_model)
+    log_for_0(
+        f"Warm started from {loaded_from} checkpoint {checkpoint_path} "
+        f"(its step {int(ckpt['step'])}, epoch {int(ckpt['epoch'])}); "
+        f"optimizer, schedule and step counter start fresh"
+    )
+    return state
+
+
+def load_checkpoint(checkpoint_path: str, state) -> Tuple[Any, int]:
+    """Load an ELF checkpoint.
+
+    Uses an existing local path first; otherwise tries HF and then local fallback.
+    """
+    log_for_0(f"Loading ELF checkpoint from {checkpoint_path}...")
+    ckpt, loaded_from = _fetch_checkpoint(checkpoint_path)
 
     log_for_0(f"Loaded checkpoint keys: {list(ckpt.keys())}")
 
     inner_model = unwrap_model(state.model)
     inner_model.load_state_dict(ckpt["params"])
-    ema_src = ckpt.get("ema_params1", ckpt["params"])
-    device_map = {n: p.device for n, p in inner_model.named_parameters()}
-    for n, b in inner_model.named_buffers():
-        device_map.setdefault(n, b.device)
-    fallback_device = next(iter(device_map.values()), torch.device("cpu"))
-    state.ema_params1 = {
-        n: t.to(device_map.get(n, fallback_device)) for n, t in ema_src.items()
-    }
+    state.ema_params1 = _ema_on_model_devices(
+        ckpt.get("ema_params1", ckpt["params"]), inner_model)
     state.optimizer.load_state_dict(ckpt["opt_state"])
     if state.lr_scheduler is not None and ckpt.get("lr_scheduler") is not None:
         state.lr_scheduler.load_state_dict(ckpt["lr_scheduler"])

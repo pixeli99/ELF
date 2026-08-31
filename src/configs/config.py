@@ -115,6 +115,7 @@ class Config:
     output_dir: str = "./output_dir"
     hf_repo_id: str = None  # Optional HF repo id to mirror local outputs/checkpoints.
     resume: str = None
+    init_from: str = None  # Warm start from these weights only; fresh optimizer, schedule and step. Ignored when resuming.
 
     # Wandb
     use_wandb: bool = False

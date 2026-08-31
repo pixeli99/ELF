@@ -23,7 +23,7 @@ from transformers import AutoTokenizer
 from modules.t5_encoder import get_encoder
 from utils.logging_utils import log_for_0
 from utils.checkpoint_utils import (
-    save_checkpoint, load_checkpoint, find_latest_checkpoint,
+    save_checkpoint, load_checkpoint, load_init_weights, find_latest_checkpoint,
 )
 from utils.train_utils import (
     TrainState, prefetch_to_device, get_optimizer, create_learning_rate_fn,
@@ -252,6 +252,11 @@ def run_training(config, *, force_cpu: bool = False):
         except Exception as e:
             log_for_0(f"Error loading checkpoint: {e}")
             log_for_0("Continuing training from scratch")
+    elif config.init_from:
+        # Finetuning: weights from the pretrained checkpoint, everything else fresh.
+        # Deliberately not reached when resuming, so a preempted finetune restarts from
+        # its own last checkpoint rather than from the pretrained weights again.
+        state = load_init_weights(config.init_from, state)
 
     # torch.compile before DDP so only the inner module is compiled and
     # checkpoint I/O (which uses unwrap_model -> _orig_mod) still works.

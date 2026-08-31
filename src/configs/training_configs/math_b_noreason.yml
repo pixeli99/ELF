@@ -1,0 +1,98 @@
+# Stage 0 floor check: answer with no reasoning, on the tight canvas the answer needs
+#
+# The arms share every row, every hyperparameter and every scorer. They differ in what the
+# target contains, and therefore in how wide a canvas the model has to denoise:
+#
+#   noreason       target "The answer is 42"                 generation window 32
+#   cot            target "<reasoning>\nThe answer is 42"     generation window 768
+#   noreason_wide  target "The answer is 42"                 generation window 768
+#
+# The number this stage exists to produce is the gap between cot and noreason on GSM8K
+# test: the ceiling on what any compressed form of the reasoning could ever buy.
+# noreason_wide is the control that says whether a gap came from the reasoning or merely
+# from having a wider canvas to denoise.
+#
+# Window sizes are set from the measured target lengths in data/math_v1/manifest.json
+# (answer p100 19 tokens, reasoning+answer p90 665). A wider window than the target needs
+# is not free: `pad_token: eos` puts every position after the target in the loss, so a
+# 64-token window around a 5-token answer spends 92 percent of the signal on predicting
+# EOS, which a smoke run drove to ce 0.0002 within 500 steps.
+#
+# Objective hyperparameters follow the official conditional recipe (train_xsum_ELF-B.yml)
+# rather than the unconditional pretraining one; they differ only in decoder_noise_scale,
+# 5.0 while pretraining and 1.0 for conditional tasks. Every arm gets the same value.
+
+# Dataset
+data_path: data/math_v1/noreason
+eval_data_path: null            # GSM8K accuracy comes from src/eval.py, not from training
+max_length: 288
+max_input_length: 256   # GSM8K test questions reach 188 t5 tokens, so none is cut
+pad_token: eos                  # the tail after the target is EOS and all of it is supervised
+
+# Encoder
+encoder_model_name: assets/t5-small   # staged on cpfs01: a DLC worker has no HF cache
+tokenizer_name: assets/t5-small
+latent_mean: 0.0
+latent_std: 0.2
+
+# Model architecture
+model: ELF-B
+bottleneck_dim: 128
+num_time_tokens: 4
+num_self_cond_cfg_tokens: 4
+num_model_mode_tokens: 4
+
+# Denoiser objective
+denoiser_p_mean: -1.5
+denoiser_p_std: 0.8
+denoiser_noise_scale: 2.0
+t_eps: 0.05
+time_schedule: logit_normal
+
+# Decoder objective
+decoder_prob: 0.2
+decoder_noise_scale: 1.0
+decoder_p_mean: 0.8
+decoder_p_std: 0.8
+
+# Conditioning / CFG
+label_drop_prob: 0.1
+self_cond_prob: 0.5
+
+# Training (optimizer + schedule)
+init_from: outputs/reference_elf_b_owt/checkpoint_95085
+epochs: 12
+global_batch_size: 512        # micro batch summed across the 4 devices of this arm
+grad_accum_steps: 1       # effective batch = 512 * 1 = 512 in every arm
+lr: 1.0e-3                      # explicit, so the arms train at the same rate whatever
+                                # micro batch their memory allows
+lr_schedule: cosine
+warmup_steps: 300          # micro steps, i.e. 300 optimizer steps in every arm
+min_lr: 0.0
+weight_decay: 0.0
+optimizer: muon
+gradient_checkpointing: false
+
+# EMA
+ema_decay1: 0.999               # 0.9999 has a 10k-step horizon this run never leaves
+
+# Sampling
+sampling_configs_path: src/configs/sampling_configs/cond_sampling_configs.yml
+num_samples: 1319
+
+# Logging & Checkpointing
+log_freq: 100
+eval_freq: 0                    # no in-training generation
+online_eval: false
+save_freq: 3
+
+# Output
+output_dir: outputs/math_b_noreason
+hf_repo_id: null
+resume: null
+
+# Wandb
+use_wandb: false
+
+# Misc
+seed: 42
