@@ -1,8 +1,0 @@
-# Ceiling experiment (not a deployable protocol): vanilla model whose clean prefix is
-# prompt[:512] + gold thinking[:1024]. Tells how much the reasoning text can help the
-# response at all; the plan groups are trying to deliver a compressed version of it.
-base_config: train_conditional_common48w_vanilla_causal_eos_v5.yml
-output_dir: outputs/elf_b_conditional_common48w_vanilla_thinkprefix_eos_v5
-condition_includes_thinking: true
-condition_max_tokens: 512
-condition_thinking_max_tokens: 1024

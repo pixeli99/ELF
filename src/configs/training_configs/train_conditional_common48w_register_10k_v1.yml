@@ -1,7 +1,0 @@
-base_config: train_conditional_ELF-B_common48w.yml
-group_mode: register
-output_dir: outputs/elf_b_conditional_common48w_register_10k_v1
-plan_register_only: true
-plan_done_frac: 0.0
-plan_diag_frac: 0.0
-plan_loss_weight: 0.0

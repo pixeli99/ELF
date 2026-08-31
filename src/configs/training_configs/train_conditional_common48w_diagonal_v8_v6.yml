@@ -1,8 +1,0 @@
-# v6: same protocol as v5 (prompt-causal attention, EOS-supervised stopping) with the
-# fixed Plan-VAE. v8 keeps 37.5% of gold numeric answers through an encode/decode round
-# trip against v7's 21.1%, at identical KL settings; the difference is span_input=flat,
-# the encoder seeing each 16-token block instead of only its mean.
-base_config: train_conditional_common48w_diagonal_causal_eos_v5.yml
-output_dir: outputs/elf_b_conditional_common48w_diagonal_v8_v6
-plan_vae_artifact: artifacts/plan_vae/plan_vae_v8_flat_beta0.1.pt
-plan_vae_artifact_sha256: fe06a247d5c32f5a4016a5339576314216d595c4d754569542981b1f5dac3293

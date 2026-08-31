@@ -1,3 +1,0 @@
-base_config: train_conditional_common48w_register_10k_v1.yml
-output_dir: outputs/elf_b_conditional_common48w_register_causal_10k_v1
-plan_response_attention: prompt_causal_bottleneck
