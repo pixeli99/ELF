@@ -30,6 +30,17 @@ export TOKENIZERS_PARALLELISM=false
 export HF_HUB_OFFLINE=1          # every weight is staged on cpfs01; never reach the network
 export TORCH_DIST_TIMEOUT_MINUTES=180
 
+# The cluster image does not ship muon-optimizer, which the official configs select.
+export PYTHONPATH="$REPO/assets/pydeps${PYTHONPATH:+:$PYTHONPATH}"
+
+# DLC injects WORLD_SIZE / RANK / MASTER_ADDR / MASTER_PORT for the pytorchjob as a whole.
+# This job runs several independent single-node launches inside one pod, so leaving them
+# set makes every bare `python` process believe it is rank 0 of one group and race for one
+# port: four eval processes then die with EADDRINUSE on the injected port 23456. torchrun
+# sets these itself for its own children, so unsetting them costs the training nothing.
+unset WORLD_SIZE RANK LOCAL_RANK MASTER_ADDR MASTER_PORT
+unset GROUP_RANK ROLE_RANK LOCAL_WORLD_SIZE ROLE_WORLD_SIZE TORCHELASTIC_RUN_ID
+
 fail() { echo "FATAL: $*" >&2; exit 1; }
 
 banner() { echo; echo "=== $* ==="; date '+%F %T'; }
@@ -58,6 +69,11 @@ preflight() {
     done
     python -c "import torch, transformers, datasets; print(f'  torch {torch.__version__} transformers {transformers.__version__} datasets {datasets.__version__}')" \
         || fail "python imports failed"
+    # muon lives in assets/pydeps, not in the image. A missing optimizer surfaces only once
+    # the model is already built, which on the first attempt cost a whole 16-GPU job.
+    python -c "import muon; print(f'  muon {muon.__file__}')" \
+        || fail "cannot import muon: run scripts/stage_assets.sh"
+    [ -z "${MASTER_PORT:-}" ] || fail "MASTER_PORT is still set; the unset above did not take"
 }
 
 devices_for() {  # index -> "0,1,2,3"
